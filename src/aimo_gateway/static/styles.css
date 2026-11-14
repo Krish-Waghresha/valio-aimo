@@ -663,7 +663,7 @@ footer {
 /* ---- Progress (real backend stages, paced for reading) ---- */
 .working-card { display: grid; gap: var(--space-3); padding: var(--space-4); background: #F2F6F8; border-left: 4px solid var(--teal); }
 .progress { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-.progress li { display: flex; gap: 10px; align-items: center; animation: fadein .25s ease-out; }
+.progress li { display: flex; gap: 10px; align-items: center; }
 .progress .pmark { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 13px; font-weight: 700; flex: 0 0 auto; background: var(--teal); color: var(--white); }
 .progress li.running .pmark { background: transparent; border: 3px solid var(--line); border-top-color: var(--teal); animation: spin .8s linear infinite; }
 .progress li.running { color: var(--secondary); }

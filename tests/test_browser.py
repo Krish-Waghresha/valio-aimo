@@ -2,6 +2,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
@@ -141,6 +142,69 @@ def test_mobile_direct_purchase_is_autonomous(demo):
     assert result["evaluation"]["outcome"] == "allowed"
     assert result["order"]["totals"]["grossMinor"] < 5000
     demo.layout(page, "04-order-mobile.png")
+
+
+@pytest.mark.parametrize("approval_case", ["approved", "legacy", "autonomous", "unavailable"])
+def test_order_summary_uses_recorded_approval_actor(demo, approval_case):
+    evaluation_id = "evaluation-current"
+    job = {
+        "id": "summary-job", "state": "ordered_mock", "brief": "20 kg butter", "mode": "fixture",
+        "deliveryDate": "2026-11-20",
+        "evaluation": {
+            "id": evaluation_id,
+            "outcome": "allowed" if approval_case == "autonomous" else "approval_required",
+            "reasons": [{"code": "SUBSTITUTION_REQUIRES_APPROVAL" if approval_case == "approved" else "APPROVAL_THRESHOLD_EXCEEDED"}],
+        },
+        "order": {
+            "id": "order-current", "evaluationId": evaluation_id,
+            "committedBy": "buyer-agent", "committedAt": "2026-11-14T12:00:00Z", "lines": [],
+        },
+    }
+    if approval_case == "autonomous":
+        job["evaluation"]["reasons"] = []
+    events = [{"type": "evaluation.decided", "evaluationId": "previous-evaluation", "actorId": "manager", "outcome": "approve"}]
+    if approval_case in {"approved", "legacy"}:
+        decision = {"type": "evaluation.decided", "evaluationId": evaluation_id, "actorId": "reviewer-42"}
+        if approval_case == "approved":
+            decision["outcome"] = "approve"
+        events.append(decision)
+    events.append({"type": "evaluation.decided", "evaluationId": "rejected-evaluation", "actorId": "manager", "outcome": "reject"})
+    responses = {
+        "/workspace/session": {"principalId": "chef", "scopes": ["audit:read"], "mode": "fixture", "today": "2026-11-14"},
+        "/workspace/jobs": [job],
+        "/workspace/jobs/summary-job": job,
+        "/workspace/jobs/summary-job/events": events,
+    }
+    app_path = Path(__file__).resolve().parents[1] / "src/aimo_gateway/static/app.js"
+
+    def respond(route):
+        path = urlsplit(route.request.url).path
+        if path == "/":
+            route.fulfill(content_type="text/html", body='<div id="app"></div><div id="live"></div><script src="/static/app.js"></script>')
+        elif path == "/static/app.js":
+            route.fulfill(path=str(app_path))
+        elif path.endswith("/events") and approval_case == "unavailable":
+            route.fulfill(status=503, json={"detail": "Approval events unavailable"})
+        elif path in responses:
+            route.fulfill(json=responses[path])
+        else:
+            route.fulfill(status=404, body="Not found")
+
+    context = demo.browser.new_context()
+    demo.contexts.append(context)
+    page = context.new_page()
+    page.route("**/*", respond)
+    page.goto(demo.url + "/#job/summary-job/basket")
+    summary = page.locator(".decision")
+    expect(summary.get_by_text("Order number", exact=True)).to_be_visible()
+    expect(summary.locator('dt:text-is("Placed by") + dd')).to_have_text("Buyer agent")
+    if approval_case in {"approved", "legacy"}:
+        expect(summary.locator('dt:text-is("Approved by") + dd')).to_have_text("reviewer-42")
+    else:
+        expect(summary.locator('dt:text-is("Approved by")')).to_have_count(0)
+        expect(summary.locator('dt:text-is("Approval") + dd')).to_have_text("Not needed (within authority)" if approval_case == "autonomous" else "Not available")
+    if approval_case == "unavailable":
+        expect(page.get_by_role("alert")).to_contain_text("Approval events unavailable")
 
 
 def test_pantry_and_late_delivery_recovery(demo):
