@@ -91,3 +91,14 @@ def test_nothing_eligible_blocks_with_reason():
                                           {"463010": fact("19.42", reasons=["DELIVERY_UNAVAILABLE"])}, {}, "balanced", "2026-11-16")
     assert lines == [] and exceptions[0]["severity"] == "blocked"
     assert "not available" in actions[0]["message"]
+
+
+def test_unreliable_usual_product_asks_before_switching():
+    usual = candidate("465845", "Valiojogurtti 1 kg")
+    safe = candidate("476824", "Valio A+ yoghurt 1 kg")
+    facts = {"465845": fact("1.92"), "476824": fact("2.44")}
+    reliability = {"465845": Decimal("0.5"), "476824": Decimal("1.0")}
+    lines, exceptions, _, _ = decide({"query": "yogurt", "quantity": "50", "unit": "kg"}, "yogurt", [usual, safe], facts, reliability, "balanced", "2026-11-16")
+    assert lines == [] and exceptions[0]["kind"] == "delivery_risk"
+    assert [option["id"] for option in exceptions[0]["options"]] == ["switch", "keep"]
+    assert "50 %" in exceptions[0]["title"]

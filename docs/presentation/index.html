@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trusted Trade Agents · The Delusionals</title>
+<style>
+  @font-face { font-family: "Barlow Condensed"; src: url("../../src/aimo_gateway/static/fonts/barlow-condensed-700.woff2") format("woff2"); font-weight: 700; }
+  @font-face { font-family: "Barlow Condensed"; src: url("../../src/aimo_gateway/static/fonts/barlow-condensed-600.woff2") format("woff2"); font-weight: 600; }
+  @font-face { font-family: "DM Sans"; src: url("../../src/aimo_gateway/static/fonts/dm-sans-400.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "DM Sans"; src: url("../../src/aimo_gateway/static/fonts/dm-sans-700.woff2") format("woff2"); font-weight: 700; }
+  :root { --teal: #005670; --deep: #003747; --lime: #C0E021; --ink: #23282D; --mist: #F2F6F8; --line: #DEE4E6; --amber: #FDDB32; --red: #F9423A; --green: #00833F; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0d1b21; font-family: "DM Sans", Helvetica, Arial, sans-serif; color: var(--ink); }
+  .stage { position: fixed; inset: 0; display: grid; place-items: center; }
+  .deck { width: 1600px; height: 900px; position: relative; transform-origin: center; }
+  .slide { position: absolute; inset: 0; padding: 80px 96px; background: #fff; display: none; flex-direction: column; overflow: hidden; }
+  .slide.active { display: flex; animation: in .35s ease-out; }
+  @keyframes in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  h1, h2, h3, .big { font-family: "Barlow Condensed", "Arial Narrow", sans-serif; letter-spacing: 0; margin: 0; line-height: 1.02; }
+  h1 { font-size: 132px; color: var(--teal); }
+  h2 { font-size: 76px; color: var(--teal); margin-bottom: 36px; }
+  h3 { font-size: 40px; color: var(--teal); margin-bottom: 12px; }
+  p, li { font-size: 30px; line-height: 1.4; margin: 0; }
+  .kicker { font-size: 22px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--teal); margin-bottom: 24px; }
+  .dark { background: var(--teal); color: #fff; }
+  .dark h1, .dark h2, .dark h3, .dark .kicker { color: #fff; }
+  .lime { color: var(--lime); }
+  .brand { position: absolute; left: 96px; bottom: 40px; font-family: "Barlow Condensed"; font-weight: 700; font-size: 28px; text-transform: uppercase; color: var(--teal); opacity: .9; }
+  .dark .brand { color: #fff; }
+  .num { position: absolute; right: 96px; bottom: 40px; font-size: 18px; color: #8C9699; }
+  .quote { margin-top: 48px; padding: 28px 36px; border-left: 8px solid var(--lime); background: rgba(255,255,255,.08); font-size: 34px; max-width: 1150px; }
+  .names { margin-top: auto; display: flex; gap: 48px; align-items: baseline; font-size: 28px; }
+  .names strong { font-family: "Barlow Condensed"; font-size: 44px; color: var(--lime); text-transform: uppercase; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+  .card { padding: 32px; background: var(--mist); border-top: 8px solid var(--teal); }
+  .card p { font-size: 26px; }
+  .card.alone { border-color: var(--lime); }
+  .card.human { border-color: var(--amber); }
+  .card.never { border-color: var(--red); }
+  .card .big { font-size: 54px; color: var(--ink); margin-bottom: 8px; }
+  .card ul { padding-left: 26px; margin: 12px 0 0; }
+  .card li { font-size: 25px; margin-bottom: 8px; }
+  .flow { display: flex; align-items: stretch; gap: 0; margin-top: 12px; }
+  .node { flex: 1; padding: 28px 24px; background: var(--mist); border: 2px solid var(--line); text-align: center; }
+  .node .big { font-size: 44px; color: var(--teal); }
+  .node p { font-size: 22px; color: #3E474D; margin-top: 8px; }
+  .node.gw { background: var(--teal); color: #fff; border-color: var(--teal); }
+  .node.gw .big { color: #fff; } .node.gw p { color: #dfeef2; }
+  .arrow { width: 70px; display: grid; place-items: center; font-size: 46px; color: var(--teal); }
+  .human-row { margin-top: 28px; display: flex; justify-content: center; }
+  .pill { display: inline-flex; gap: 12px; align-items: center; padding: 14px 24px; background: #FEF4C2; border-left: 8px solid var(--amber); font-size: 26px; font-weight: 700; }
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 40px; }
+  .step { padding: 22px; border: 2px solid var(--line); font-size: 24px; }
+  .step b { display: block; font-family: "Barlow Condensed"; font-size: 36px; color: var(--teal); }
+  .frag { opacity: 0; transform: translateY(10px); transition: opacity .35s, transform .35s; }
+  .frag.shown { opacity: 1; transform: none; }
+  .story { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: start; }
+  .xcard { background: #FEF4C2; border-left: 10px solid var(--amber); padding: 30px 34px; }
+  .xcard .big { font-size: 46px; color: var(--ink); margin-bottom: 14px; }
+  .opt { display: flex; justify-content: space-between; gap: 24px; padding: 18px 22px; margin-top: 12px; background: #fff; border: 2px solid var(--teal); font-size: 24px; font-weight: 700; }
+  .opt.rec { background: var(--teal); color: #fff; }
+  .opt span:last-child { font-weight: 400; white-space: nowrap; }
+  .tag { font-size: 14px; letter-spacing: .08em; text-transform: uppercase; background: var(--lime); color: var(--teal); padding: 3px 8px; margin-right: 10px; }
+  .facts li { font-size: 28px; margin-bottom: 16px; }
+  .facts { padding-left: 30px; }
+  .term { background: #0f1f26; color: #d7e7ec; font-family: ui-monospace, Menlo, monospace; font-size: 23px; padding: 28px 32px; line-height: 1.6; }
+  .term .no { color: #ff8a84; } .term .ok { color: var(--lime); } .term .c { color: #7f9aa3; }
+  .open { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+  .badge { display: inline-block; padding: 6px 16px; margin: 0 10px 12px 0; border-radius: 20px; background: rgba(0,131,63,.1); color: var(--green); font-weight: 700; font-size: 24px; }
+  .end { align-items: center; justify-content: center; text-align: center; }
+  .end h1 { font-size: 150px; }
+  .end .team { font-family: "Barlow Condensed"; font-size: 64px; color: var(--lime); text-transform: uppercase; margin-top: 30px; }
+  .end p { color: #dfeef2; }
+  .progress { position: fixed; left: 0; bottom: 0; height: 6px; background: var(--lime); transition: width .3s; }
+  .hint { position: fixed; right: 16px; top: 12px; color: #6b8790; font: 13px "DM Sans", sans-serif; }
+  @media screen {
+    html.all-slides, html.all-slides body { height: auto; }
+    .all-slides .stage { position: relative; display: block; margin: 0 auto; overflow: hidden; }
+    .all-slides .deck { height: auto; transform-origin: top left; }
+    .all-slides .slide { position: relative; display: flex; height: 900px; animation: none; }
+    .all-slides .frag { opacity: 1; transform: none; transition: none; }
+    .all-slides .hint, .all-slides .progress { display: none; }
+  }
+  @page { size: 1600px 900px; margin: 0; }
+  @media print {
+    html, body { width: 1600px; height: auto; background: #fff; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .stage { position: static; display: block; width: 1600px !important; height: auto !important; }
+    .deck { height: auto; transform: none !important; }
+    .slide { position: relative; display: flex; width: 1600px; height: 900px; break-after: page; break-inside: avoid; animation: none !important; }
+    .slide:last-child { break-after: auto; }
+    .frag { opacity: 1; transform: none; transition: none; }
+    .hint, .progress { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage"><div class="deck" id="deck">
+  <!-- A Opening -->
+  <section class="slide dark">
+    <p class="kicker">Valio Aimo · Junction 2026 · The Delusionals</p>
+    <h1 style="font-size:116px">Trusted <span class="lime">Trade</span> Agents</h1>
+    <p style="font-size:36px;margin-top:20px;max-width:1250px">A purchasing-agent prototype with an open API and rules for spending, human approval and audit.</p>
+    <div class="quote" style="margin-top:36px">“I need 1,000 litres of lactose-free milk by Monday. Find an option that meets our requirements based on price and availability.”</div>
+    <div class="flow" style="margin-top:44px;color:var(--ink)">
+      <div class="node"><div class="big">Hotel's agent</div><p>asks in plain words</p></div>
+      <div class="arrow" style="color:var(--lime)">→</div>
+      <div class="node gw" style="background:var(--deep)"><div class="big">Aimo gateway</div><p>open API · limits · approvals · audit</p></div>
+      <div class="arrow" style="color:var(--lime)">→</div>
+      <div class="node"><div class="big">Valio Aimo</div><p>challenge catalog · price · stock</p></div>
+    </div>
+    <div class="names" style="margin-top:36px"><strong>The Delusionals</strong><span>Krish Waghresha</span><span>Jakub Piotrowski</span></div>
+  </section>
+
+  <!-- B Closing -->
+  <section class="slide">
+    <p class="kicker">Illustrated demo policy — enforced by the gateway</p>
+    <div class="grid3" style="margin-top:4px">
+      <div class="card alone"><div class="big">Alone</div><p>Up to <b>€500</b> per order · e.g. 20 kg butter, €42</p></div>
+      <div class="card human"><div class="big">Needs a human</div><p>Over the limit · switching the usual product · partial delivery — e.g. 1,000 L milk, €1,150</p></div>
+      <div class="card never"><div class="big">Never</div><p>Approve itself · order on a stale price · guess an allergen as safe</p></div>
+    </div>
+    <div class="open" style="margin-top:44px">
+      <div><h3>Open by design</h3><span class="badge">OpenAPI 3.1</span><span class="badge">JSON Schema</span><span class="badge">Scoped tokens</span><span class="badge">GS1 allergens</span><span class="badge">Synthetic APIs</span>
+        <p style="font-size:24px;margin-top:10px;color:#3E474D">Every step logged in plain language for the buyer and for Valio Aimo.</p></div>
+      <div><h3>Future work</h3><ul class="facts" style="margin:0"><li>MCP for credentialed, compatible agents</li><li>Signed proof of price &amp; stock</li><li>Real order API &amp; customer policies</li></ul></div>
+    </div>
+    <div style="margin-top:auto">
+      <p class="big" style="font-size:64px;color:var(--teal)">Open to agents. On Valio Aimo's terms.</p>
+      <p style="font-size:26px;margin-top:10px"><b style="font-family:'Barlow Condensed';font-size:34px;color:var(--teal);text-transform:uppercase">The Delusionals</b> &nbsp;·&nbsp; Krish Waghresha &nbsp;·&nbsp; Jakub Piotrowski</p>
+    </div>
+  </section>
+
+  <!-- Appendix divider -->
+  <section class="slide dark end"><p class="kicker">Appendix</p><h1 style="font-size:110px">Questions</h1><p style="font-size:30px;margin-top:20px">Detail slides for Q&amp;A</p></section>
+
+
+  <!-- 2 Problem -->
+  <section class="slide">
+    <p class="kicker">The problem</p>
+    <h2>When agents buy, who sets the rules?</h2>
+    <div class="grid3">
+      <div class="card frag"><div class="big">Agent access</div><p>Compatible agents need provisioned credentials and explicit purchasing authority.</p></div>
+      <div class="card frag"><div class="big">Enforced policy</div><p>This prototype checks spending, approval and safety rules before recording a local mock order.</p></div>
+      <div class="card frag"><div class="big">Who owns the rules?</div><p>A gateway lets Valio Aimo and the buyer define agent authority.</p></div>
+    </div>
+    <div class="brand">Aimo · Purchasing agent</div><div class="num"></div>
+  </section>
+
+  <!-- 3 How it works -->
+  <section class="slide">
+    <p class="kicker">How it works</p>
+    <h2>An open API for credentialed agents</h2>
+    <div class="flow">
+      <div class="node"><div class="big">Hotel's agent</div><p>or our buyer workspace — same rules</p></div>
+      <div class="arrow">→</div>
+      <div class="node gw"><div class="big">Aimo gateway</div><p>open API · permissions · limits · audit</p></div>
+      <div class="arrow">→</div>
+      <div class="node"><div class="big">Valio Aimo</div><p>challenge catalog · price · stock · delivery</p></div>
+    </div>
+    <div class="human-row frag"><div class="pill">👤 Kitchen manager signs anything outside the agent's authority</div></div>
+    <div class="steps">
+      <div class="step frag"><b>1 Request</b>deterministic parsing → structured basket</div>
+      <div class="step frag"><b>2 Lookup</b>17,546 products in the demo snapshot → shortlist</div>
+      <div class="step frag"><b>3 Order</b>priced basket; local mock orders only</div>
+      <div class="step frag"><b>4 Approval</b>within authority, or a human approves</div>
+    </div>
+    <div class="brand">Aimo · Purchasing agent</div><div class="num"></div>
+  </section>
+
+  <!-- 4 Rules -->
+  <section class="slide">
+    <p class="kicker">Demo autonomy &amp; controls</p>
+    <h2>What the agent may decide</h2>
+    <div class="grid3">
+      <div class="card alone frag"><div class="big">Alone</div><p>Up to <b>€500</b> per order</p><ul><li>Picks the best in-stock product</li><li>Skips past-cutoff &amp; unavailable items</li><li>Avoids unreliable deliveries</li><li>Rounds to whole packs</li></ul></div>
+      <div class="card human frag"><div class="big">Needs a human</div><p>The buyer — or the kitchen manager over the limit</p><ul><li>Orders over the limit</li><li>Switching from the usual product</li><li>Partial deliveries</li><li>Anything unclear → one question</li></ul></div>
+      <div class="card never frag"><div class="big">Never</div><p>Enforced by the gateway</p><ul><li>Approve its own order</li><li>Order on a stale price (&gt; 2 min)</li><li>Guess an allergen as safe</li><li>Exceed the hard order limit</li></ul></div>
+    </div>
+    <div class="brand">Aimo · Purchasing agent</div><div class="num"></div>
+  </section>
+
+  <!-- 5 Exception story -->
+  <section class="slide">
+    <p class="kicker">Illustrated challenge response — synthetic services</p>
+    <h2>When the exact request can't be met</h2>
+    <div class="story">
+      <div class="xcard">
+        <div class="big">Only 384 L of your usual Arla for Mon 16 Nov</div>
+        <p style="font-size:24px">Request: 1,000 L. Challenge-catalog substitute: same lactose-free 1 L spec; 100 % delivered in full in supplied history.</p>
+        <div class="opt rec frag"><span><span class="tag">Best</span>Switch all 1,000 L to Valio Arki Eila</span><span>€1,150</span></div>
+        <div class="opt frag"><span>Keep 384 L Arla + 616 L Valio</span><span>€1,787 · +€637</span></div>
+        <div class="opt frag"><span>Only 384 L Arla</span><span>616 L short</span></div>
+      </div>
+      <ul class="facts">
+        <li class="frag">One live lookup for <b>11 shortlisted products</b> — never the full catalog</li>
+        <li class="frag">3 skipped automatically: <b>cutoff passed (2), not available (1)</b></li>
+        <li class="frag">Good · better · best, priced — <b>one tap</b> for the buyer</li>
+        <li class="frag">€1,150 &gt; €500 limit → <b>kitchen manager approves</b>, price re-checked</li>
+      </ul>
+    </div>
+    <div class="brand">Aimo · Purchasing agent</div><div class="num"></div>
+  </section>
+
+  <!-- 7 Trust & audit -->
+  <section class="slide">
+    <p class="kicker">Trust &amp; audit</p>
+    <h2>Every decision on record. Every shortcut refused.</h2>
+    <div class="open">
+      <div class="term">
+        <div class="c"># buyer agent tries to skip the manager</div>
+        <div>POST /v1/orders</div>
+        <div class="no frag">409 · Approval required</div>
+        <div class="c" style="margin-top:14px"># …or approve its own order</div>
+        <div>POST /v1/evaluations/…/decisions</div>
+        <div class="no frag">403 · An authenticated human is required</div>
+        <div class="c" style="margin-top:14px"># manager approves → price &amp; stock re-checked</div>
+        <div class="ok frag">201 · Mock order AIMO-… recorded locally</div>
+      </div>
+      <ul class="facts">
+        <li class="frag">Approval is bound to <b>one exact priced basket</b> — any change needs a new one</li>
+        <li class="frag">Plain-language log: <b>what was skipped and why</b>, who chose, who approved</li>
+        <li class="frag">Machine-readable record for <b>buyer and Valio Aimo</b></li>
+        <li class="frag">Diet &amp; allergens <b>fail closed</b>: missing data is never “safe”</li>
+      </ul>
+    </div>
+    <div class="brand">Aimo · Purchasing agent</div><div class="num"></div>
+  </section>
+
+  <!-- 8 Open by design -->
+  <section class="slide">
+    <p class="kicker">Openness &amp; path to production</p>
+    <h2>Open by design</h2>
+    <div class="open">
+      <div>
+        <h3>Built on</h3>
+        <span class="badge">OpenAPI 3.1</span><span class="badge">JSON Schema</span><span class="badge">RFC 9457 errors</span><span class="badge">Scoped tokens</span><span class="badge">GS1 allergen codes</span><span class="badge">Synthetic APIs</span>
+        <h3 style="margin-top:28px">Honest assumptions</h3>
+        <ul class="facts"><li>Local mock orders, not supplier acceptance; no supplier order API</li><li>Deterministic parsing by default; optional xAI when configured. Runtime inference unverified.</li></ul>
+      </div>
+      <div>
+        <h3>Future work</h3>
+        <ul class="facts">
+          <li class="frag"><b>MCP</b> for credentialed, compatible agents</li>
+          <li class="frag"><b>Signed proof</b> of price, stock and origin (AP2-style mandates)</li>
+          <li class="frag">Real order API + customer policies from Minun Aimo</li>
+          <li class="frag">Standing-order drift &amp; recipe-aware substitutions</li>
+        </ul>
+      </div>
+    </div>
+    <div class="brand">Aimo · Purchasing agent</div><div class="num"></div>
+  </section>
+
+  <!-- 9 End card -->
+  <section class="slide dark end">
+    <p class="kicker">Trusted Trade Agents</p>
+    <h1>Open to agents.<br><span class="lime">On Valio Aimo's terms.</span></h1>
+    <div class="team">The Delusionals</div>
+    <p style="font-size:32px;margin-top:10px">Krish Waghresha · Jakub Piotrowski</p>
+    <p style="font-size:22px;margin-top:28px;opacity:.8">github.com/Krish-Waghresha/valio-aimo</p>
+  </section>
+</div></div>
+<div class="progress" id="progress"></div>
+<div class="hint">← → / space · F fullscreen</div>
+<script>
+  const slides = [...document.querySelectorAll(".slide")];
+  const allSlides = new URLSearchParams(location.search).has("all");
+  document.documentElement.classList.toggle("all-slides", allSlides);
+  slides.forEach((slide, n) => slide.querySelectorAll(".num").forEach((el) => { el.textContent = `${n + 1} / ${slides.length}`; }));
+  let index = Math.max(0, Math.min(slides.length - 1, (parseInt(location.hash.slice(1), 10) || 1) - 1));
+  function fit() {
+    const deck = document.getElementById("deck");
+    const scale = allSlides ? Math.min(document.documentElement.clientWidth / 1600, 1) : Math.min(innerWidth / 1600, innerHeight / 900);
+    deck.style.transform = `scale(${scale})`;
+    if (allSlides) {
+      deck.parentElement.style.width = `${1600 * scale}px`;
+      deck.parentElement.style.height = `${slides.length * 900 * scale}px`;
+    }
+  }
+  function show(i, revealAll) {
+    index = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach((slide, n) => slide.classList.toggle("active", n === index));
+    slides[index].querySelectorAll(".frag").forEach((el) => el.classList.toggle("shown", Boolean(revealAll)));
+    document.getElementById("progress").style.width = `${(index + 1) / slides.length * 100}%`;
+    history.replaceState(null, "", `#${index + 1}`);
+    if (allSlides) slides[index].scrollIntoView({ block: "start" });
+  }
+  function next() {
+    const hidden = slides[index].querySelector(".frag:not(.shown)");
+    if (hidden) hidden.classList.add("shown"); else if (index < slides.length - 1) show(index + 1);
+  }
+  function prev() { if (index > 0) show(index - 1, true); }
+  addEventListener("keydown", (e) => {
+    if (allSlides && e.key !== "f" && e.key !== "F") return;
+    if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)) { e.preventDefault(); next(); }
+    if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)) { e.preventDefault(); prev(); }
+    if (e.key === "f" || e.key === "F") document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    if (e.key === "Home") show(0);
+    if (e.key === "End") show(slides.length - 1, true);
+  });
+  addEventListener("click", (e) => { if (allSlides) return; if (e.clientX > innerWidth / 3) next(); else prev(); });
+  addEventListener("resize", fit);
+  addEventListener("hashchange", () => { const n = (parseInt(location.hash.slice(1), 10) || 1) - 1; if (n !== index) show(n, allSlides); });
+  fit(); show(index, allSlides);
+</script>
+</body>
+</html>

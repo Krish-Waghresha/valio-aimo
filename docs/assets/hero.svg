@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="400" viewBox="0 0 1280 400" role="img" aria-labelledby="title description">
+  <title id="title">Open to agents. On Valio Aimo's terms.</title>
+  <desc id="description">A trusted purchasing gateway: find, compare, approve and record. Junction 2026.</desc>
+  <defs>
+    <radialGradient id="background" cx="50%" cy="55%" r="80%">
+      <stop stop-color="#0a3542"/>
+      <stop offset="1" stop-color="#020b0e"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="400" rx="18" fill="url(#background)"/>
+  <circle cx="1188" cy="42" r="186" fill="#005670" opacity=".35"/>
+  <circle cx="1188" cy="42" r="122" fill="#020b0e" opacity=".5"/>
+  <path d="M1114 42h148m-40-40 40 40-40 40" fill="none" stroke="#c0e021" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <g font-family="Arial, Helvetica, sans-serif">
+    <text x="64" y="66" fill="#b6ced6" font-size="15" letter-spacing="3">JUNCTION 2026 / TRUSTED TRADE AGENTS</text>
+    <text x="60" y="172" fill="#ffffff" font-size="76" font-weight="700" letter-spacing="-3">Open to agents.</text>
+    <text x="64" y="237" fill="#ffffff" font-size="44" letter-spacing="-1">On Valio Aimo's terms.</text>
+    <path d="M64 289h1152" stroke="#28515e"/>
+    <text x="64" y="340" fill="#c0e021" font-size="18" letter-spacing="2">FIND</text>
+    <text x="211" y="340" fill="#b6ced6" font-size="18">/</text>
+    <text x="261" y="340" fill="#c0e021" font-size="18" letter-spacing="2">COMPARE</text>
+    <text x="480" y="340" fill="#b6ced6" font-size="18">/</text>
+    <text x="530" y="340" fill="#c0e021" font-size="18" letter-spacing="2">APPROVE</text>
+    <text x="745" y="340" fill="#b6ced6" font-size="18">/</text>
+    <text x="795" y="340" fill="#c0e021" font-size="18" letter-spacing="2">RECORD</text>
+  </g>
+</svg>

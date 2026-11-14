@@ -2,6 +2,11 @@
 .env.*
 !.env.example
 .venv/
+.vscode/
+.claude/
+.DS_Store
+dist/
+build/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
@@ -11,3 +16,6 @@ data/valio/
 data/gateway/
 playwright/.auth/
 valio-aimo-challenge.md
+video/build/
+video/recordings/*
+!video/recordings/README.md
