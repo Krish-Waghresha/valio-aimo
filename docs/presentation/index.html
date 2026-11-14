@@ -96,6 +96,13 @@
   .closing .scope { margin-top: 36px; color: #d2e6ec; font-size: 25px; }
   .closing .slide-footer { color: #d2e6ec; }
   .closing .slide-footer strong { color: #fff; }
+  .thanks h2 { margin-top: 38px; font-size: 144px; }
+  .contacts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 84px; margin-top: 52px; }
+  .contact-media { display: flex; align-items: center; justify-content: space-between; gap: 40px; margin-top: 24px; }
+  .portrait { display: block; width: 280px; height: 280px; object-fit: cover; border-radius: 50%; }
+  .contact-code { display: block; flex-shrink: 0; width: 320px; height: 320px; background: #fff; }
+  .contact-code img { display: block; width: 100%; height: 100%; }
+  .contact-url { display: block; width: fit-content; margin-top: 22px; color: var(--muted); font-size: 25px; line-height: 1.4; text-decoration-thickness: 1px; text-underline-offset: 6px; }
   .hint { position: fixed; right: 15px; top: 12px; color: #8ba5ae; font-size: 12px; }
   .hint a { margin-left: 12px; }
   .status { position: fixed; left: 20px; bottom: 12px; margin: 0; font-size: 18px; color: var(--amber); }
@@ -143,12 +150,12 @@
       </svg>
       <h1 id="title-1">The next buyer<br>is an <span class="lime">agent.</span></h1>
       <p class="question">Who sets the rules?</p>
-      <footer class="slide-footer"><span><strong>The Delusionals</strong> · Krish Waghresha · Jakub Piotrowski</span><span class="page-count">01 / 05</span></footer>
+      <footer class="slide-footer"><span><strong>The Delusionals</strong> · Krish Waghresha · Jakub Piotrowski</span><span class="page-count">01 / 06</span></footer>
     </section>
     <aside class="notes">
       <p class="cue">0:00–0:20 · The problem</p>
       <p>Who places your next wholesale order? Increasingly, an agent. But who decides what it can buy, when it needs approval, and what happens when stock runs out? We built Open to Agents to keep those decisions with the owner.</p>
-      <p class="production">Three-minute slot: 20s opening + 25s architecture + 60s demo + 40s controls + 25s close = 2:50. Keep the last 10 seconds for transitions. One click advances one complete slide; there are no hidden builds.</p>
+      <p class="production">Three-minute slot: 20s opening + 25s architecture + 60s demo + 40s controls + 22s close + 3s thanks = 2:50. Keep the last 10 seconds for transitions. One click advances one complete slide; there are no hidden builds.</p>
     </aside>
   </article>
 
@@ -177,7 +184,7 @@
           <div><h3>Human approval</h3><p>Only when required</p></div>
         </div>
       </div>
-      <footer class="slide-footer"><span>Deterministic planning today. Authority stays in the gateway.</span><span class="page-count">02 / 05</span></footer>
+      <footer class="slide-footer"><span>Deterministic planning today. Authority stays in the gateway.</span><span class="page-count">02 / 06</span></footer>
     </section>
     <aside class="notes">
       <p class="cue">0:20–0:45 · What actually works</p>
@@ -204,7 +211,7 @@
           <figcaption><strong>Three options.</strong> The trade-off stays visible.</figcaption>
         </figure>
       </div>
-      <footer class="slide-footer"><span>Recorded challenge data · not a current stock or price guarantee</span><span class="page-count">03 / 05</span></footer>
+      <footer class="slide-footer"><span>Recorded challenge data · not a current stock or price guarantee</span><span class="page-count">03 / 06</span></footer>
     </section>
     <aside class="notes">
       <p class="cue">0:45–1:45 · Demo, including the switch</p>
@@ -236,7 +243,7 @@
         </div>
       </div>
       <p class="bound"><strong>One approval. One exact basket.</strong> Every decision on record.</p>
-      <footer class="slide-footer"><span>Price and stock rechecked before commitment · local mock orders</span><span class="page-count">04 / 05</span></footer>
+      <footer class="slide-footer"><span>Price and stock rechecked before commitment · local mock orders</span><span class="page-count">04 / 06</span></footer>
     </section>
     <aside class="notes">
       <p class="cue">1:45–2:25 · Why this is a trusted interface</p>
@@ -254,13 +261,48 @@
         <div><p class="kicker">Next, for production</p><p>Production identity · supplier order API</p></div>
       </div>
       <p class="scope">Synthetic systems. Local mock orders. No payments.</p>
-      <footer class="slide-footer"><span><strong>The Delusionals</strong> · Krish Waghresha · Jakub Piotrowski</span><span class="page-count">05 / 05</span></footer>
+      <footer class="slide-footer"><span><strong>The Delusionals</strong> · Krish Waghresha · Jakub Piotrowski</span><span class="page-count">05 / 06</span></footer>
     </section>
     <aside class="notes">
-      <p class="cue">2:25–2:50 · Close, then stop</p>
+      <p class="cue">2:25–2:47 · The closing line</p>
       <p>This is not a chatbot replacing the webshop. It is an open interface through which purchasing agents can work under the owner’s rules. We have the workspace, gateway, approval and audit flow. Production identity and a real supplier order API are next. Open to agents. On Valio Aimo’s terms.</p>
-      <p class="production">Finish by 2:50; the remaining 10 seconds are contingency, not another slide. Keep this frame up for questions. The closing design reuses the film’s teal-and-lime end card. The previous detailed deck remains in Git history.</p>
+      <p class="production">After the closing line, advance to the contact slide and say thank you. The closing design reuses the film’s teal-and-lime end card. The previous detailed deck remains in Git history.</p>
       <p class="production">Design reference: <a href="https://www.ycombinator.com/library/4T-how-to-design-a-better-pitch-deck" target="_blank" rel="noopener noreferrer">Y Combinator’s pitch-deck guidance</a> — readable, simple slides with one obvious point. This is a stage deck, not a technical-documentation summary.</p>
+    </aside>
+  </article>
+
+  <article class="slide-wrap">
+    <section class="slide thanks" aria-labelledby="title-6">
+      <header class="slide-header kicker"><span class="project">The Delusionals</span><span>Open to Agents</span></header>
+      <h2 id="title-6">Thank you<span class="lime">.</span></h2>
+      <div class="contacts">
+        <div class="contact-person" aria-labelledby="name-jakub">
+          <h3 id="name-jakub">Jakub Piotrowski</h3>
+          <div class="contact-media">
+            <img class="portrait" src="../assets/team/jakub.jpg" width="640" height="640" alt="Jakub Piotrowski">
+            <a class="contact-code" href="https://www.linkedin.com/in/jakub-piotrowski97/" target="_blank" rel="noopener noreferrer" aria-label="Open Jakub Piotrowski’s LinkedIn profile">
+              <img src="../assets/team/jakub-linkedin.svg" width="320" height="320" alt="QR code for Jakub Piotrowski’s LinkedIn profile">
+            </a>
+          </div>
+          <a class="contact-url" href="https://www.linkedin.com/in/jakub-piotrowski97/" target="_blank" rel="noopener noreferrer">linkedin.com/in/jakub-piotrowski97</a>
+        </div>
+        <div class="contact-person" aria-labelledby="name-krish">
+          <h3 id="name-krish">Krish Waghresha</h3>
+          <div class="contact-media">
+            <img class="portrait" src="../assets/team/krish.jpg" width="640" height="640" alt="Krish Waghresha">
+            <a class="contact-code" href="https://www.linkedin.com/in/krish-waghresha/" target="_blank" rel="noopener noreferrer" aria-label="Open Krish Waghresha’s LinkedIn profile">
+              <img src="../assets/team/krish-linkedin.svg" width="320" height="320" alt="QR code for Krish Waghresha’s LinkedIn profile">
+            </a>
+          </div>
+          <a class="contact-url" href="https://www.linkedin.com/in/krish-waghresha/" target="_blank" rel="noopener noreferrer">linkedin.com/in/krish-waghresha</a>
+        </div>
+      </div>
+      <footer class="slide-footer"><span>Scan to connect on LinkedIn</span><span class="page-count">06 / 06</span></footer>
+    </section>
+    <aside class="notes">
+      <p class="cue">2:47–2:50 · Thank you</p>
+      <p>Say “Thank you.” Leave this slide up for questions so the audience has time to scan the codes. The final 10 seconds remain contingency.</p>
+      <p class="production">Both portraits were supplied by the team. The locally generated QR codes encode the exact LinkedIn profile URLs, without a tracking redirect. Black-on-white vector codes preserve a four-module quiet zone, following <a href="https://www.qrcode.com/en/howto/code.html" target="_blank" rel="noopener noreferrer">DENSO WAVE’s guidance</a>. The codes and written URLs are also clickable in the PDF. If a profile URL changes, regenerate its QR code before exporting again.</p>
     </aside>
   </article>
 </div></main>

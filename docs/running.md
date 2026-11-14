@@ -126,12 +126,14 @@ of offline CI. Screenshots and exports stay under ignored `test-results/`.
 
 ## Presentation
 
-[View the five-slide finals pitch](presentation/slides.pdf) without running the app.
+[View the six-slide finals pitch](presentation/slides.pdf) without running the app.
 It fits **three minutes including a one-minute demo**, with ten seconds spare.
 The [HTML deck](presentation/index.html) works offline: arrows or space advance,
 `F` enters fullscreen, `?notes` shows the timed talk track, and `?all` shows every
-slide. Print with background graphics enabled for a five-page, 16:9 PDF;
+slide. Print with background graphics enabled for a six-page, 16:9 PDF;
 speaker notes stay out of the export.
+Leave the final thank-you slide up for questions; it includes both presenters’
+portraits, LinkedIn QR codes and clickable profile links.
 
 The demo slide links to the published video at 0:46. For rehearsal, stop at about
 1:39 and return to the deck; do not play the whole film inside the three-minute slot.
