@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  no-invalid-schema-examples:
+    severity: error
+    allowAdditionalProperties: true

@@ -1,0 +1,398 @@
+{
+  "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://spec.openapis.org/oas/3.1/dialect/base",
+  "info": {
+    "title": "Trusted Purchasing Gateway",
+    "version": "0.1.0",
+    "description": "Draft owned by Krish; not an implemented service or an official Valio Aimo API. Normative behavior is defined in gateway-contract.md. All orders are local mocks. Prices, quantities, grants and approvals are verified by the gateway, never trusted from an agent."
+  },
+  "servers": [{ "url": "/", "description": "Relative to the gateway deployment origin; no running server implied. Shared deployments require HTTPS." }],
+  "security": [{ "AgentBearer": [] }, { "HumanSession": [] }],
+  "tags": [
+    { "name": "Catalog", "description": "Customer-entitled static catalog search." },
+    { "name": "Requests", "description": "Human-created immutable purchasing authority context." },
+    { "name": "Baskets", "description": "Proposals, versions and immutable evaluations." },
+    { "name": "Approvals", "description": "Human-only decisions, separate from agent credentials." },
+    { "name": "Orders", "description": "Idempotent local mock commitment." },
+    { "name": "Audit", "description": "Tenant-scoped readable decision events." }
+  ],
+  "paths": {
+    "/v1/products": {
+      "get": {
+        "operationId": "searchProducts", "tags": ["Catalog"], "summary": "Search the entitled static catalog", "x-required-scopes": ["catalog:read"],
+        "parameters": [
+          { "name": "query", "in": "query", "required": true, "schema": { "type": "string", "minLength": 2, "maxLength": 120 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } }
+        ],
+        "responses": {
+          "200": { "description": "Static product facts, not live price or stock.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ProductSearch" } } } },
+          "400": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requests": {
+      "post": {
+        "operationId": "createRequest", "tags": ["Requests"], "summary": "Create a human-authorized purchasing context", "x-required-scopes": ["requests:create"],
+        "security": [{ "HumanSession": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/RequiredCsrf" }],
+        "requestBody": { "required": true, "content": { "application/json": {
+          "schema": { "$ref": "#/components/schemas/RequestInput" },
+          "example": { "brief": "Restock a catalog product for the demo.", "deliverySiteId": "demo-kitchen", "requestedDeliveryDate": "2026-11-16", "maxGrossMinor": 100000, "constraints": { "dietaryConfirmed": true, "excludedAllergens": [], "dietaryRequirements": [] } }
+        } } },
+        "responses": {
+          "201": { "description": "Immutable context. Tenant, actor and grants are resolved server-side.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PurchasingRequest" } } } },
+          "403": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requests/{requestId}": {
+      "parameters": [{ "$ref": "#/components/parameters/RequestId" }],
+      "get": {
+        "operationId": "getRequest", "tags": ["Requests"], "summary": "Read an authorized purchasing request", "x-required-scopes": ["requests:read"],
+        "responses": {
+          "200": { "description": "Current request state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PurchasingRequest" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requests/{requestId}/cancel": {
+      "parameters": [{ "$ref": "#/components/parameters/RequestId" }],
+      "post": {
+        "operationId": "cancelRequest", "tags": ["Requests"], "summary": "Cancel an uncommitted request and all its baskets", "x-required-scopes": ["requests:cancel"],
+        "security": [{ "HumanSession": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/RequiredCsrf" }],
+        "responses": {
+          "200": { "description": "Cancelled; cannot race to a simultaneous committed outcome.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PurchasingRequest" } } } },
+          "409": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requests/{requestId}/baskets": {
+      "parameters": [{ "$ref": "#/components/parameters/RequestId" }],
+      "post": {
+        "operationId": "createBasket", "tags": ["Baskets"], "summary": "Propose a basket within an existing request", "x-required-scopes": ["baskets:write"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/ConditionalCsrf" }],
+        "requestBody": { "$ref": "#/components/requestBodies/BasketInput" },
+        "responses": {
+          "201": { "description": "Draft version 1.", "headers": { "X-Basket-Version": { "$ref": "#/components/headers/BasketVersion" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Basket" } } } },
+          "422": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/baskets/{basketId}": {
+      "parameters": [{ "$ref": "#/components/parameters/BasketId" }],
+      "get": {
+        "operationId": "getBasket", "tags": ["Baskets"], "summary": "Read basket content and derived readiness", "x-required-scopes": ["baskets:read"],
+        "responses": {
+          "200": { "description": "Content version is distinct from readiness state.", "headers": { "X-Basket-Version": { "$ref": "#/components/headers/BasketVersion" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Basket" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      },
+      "put": {
+        "operationId": "replaceBasket", "tags": ["Baskets"], "summary": "Replace all lines and invalidate prior evaluation/approval", "x-required-scopes": ["baskets:write"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/ExpectedVersion" }, { "$ref": "#/components/parameters/ConditionalCsrf" }],
+        "requestBody": { "$ref": "#/components/requestBodies/BasketInput" },
+        "responses": {
+          "200": { "description": "Updated basket; identical canonical lines are a no-op and do not clear rejection.", "headers": { "X-Basket-Version": { "$ref": "#/components/headers/BasketVersion" } }, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Basket" } } } },
+          "412": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/baskets/{basketId}/evaluations": {
+      "parameters": [{ "$ref": "#/components/parameters/BasketId" }],
+      "post": {
+        "operationId": "evaluateBasket", "tags": ["Baskets"], "summary": "Evaluate authoritative prices, availability and policy", "x-required-scopes": ["baskets:evaluate"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/ExpectedVersion" }, { "$ref": "#/components/parameters/ConditionalCsrf" }],
+        "responses": {
+          "201": { "description": "Immutable evaluation, including blocked outcomes. No stock or price reservation.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Evaluation" } } } },
+          "412": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/evaluations/{evaluationId}": {
+      "parameters": [{ "$ref": "#/components/parameters/EvaluationId" }],
+      "get": {
+        "operationId": "getEvaluation", "tags": ["Baskets"], "summary": "Read the immutable evaluation, even after expiry", "x-required-scopes": ["baskets:read"],
+        "responses": {
+          "200": { "description": "Historical snapshot; consult basket state and expiry before acting.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Evaluation" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/evaluations/{evaluationId}/decisions": {
+      "parameters": [{ "$ref": "#/components/parameters/EvaluationId" }],
+      "post": {
+        "operationId": "decideEvaluation", "tags": ["Approvals"], "summary": "Record a human decision on the exact active evaluation", "x-required-scopes": ["approvals:decide"],
+        "security": [{ "HumanSession": [] }],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/RequiredCsrf" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DecisionInput" }, "example": { "decision": "approve", "comment": "Within this event's authorized budget." } } } },
+        "responses": {
+          "201": { "description": "Decision expires with its evaluation; never overrides hard failures.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Decision" } } } },
+          "409": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/orders": {
+      "post": {
+        "operationId": "commitOrder", "tags": ["Orders"], "summary": "Revalidate and atomically commit one local mock order", "x-required-scopes": ["orders:commit"],
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }, { "$ref": "#/components/parameters/ConditionalCsrf" }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/OrderInput" }, "example": { "evaluationId": "33333333-3333-4333-8333-333333333333" } } } },
+        "responses": {
+          "201": { "description": "Mock commitment, not supplier acceptance. Successful replays return the original 201 response.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" } } } },
+          "409": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/orders/{orderId}": {
+      "parameters": [{ "$ref": "#/components/parameters/OrderId" }],
+      "get": {
+        "operationId": "getOrder", "tags": ["Orders"], "summary": "Read a persisted mock order", "x-required-scopes": ["orders:read"],
+        "responses": {
+          "200": { "description": "Committed goods snapshot and actor attribution.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    },
+    "/v1/requests/{requestId}/events": {
+      "parameters": [{ "$ref": "#/components/parameters/RequestId" }],
+      "get": {
+        "operationId": "listRequestEvents", "tags": ["Audit"], "summary": "Read ordered tenant-scoped audit events", "x-required-scopes": ["audit:read"],
+        "parameters": [
+          { "name": "afterSequence", "in": "query", "schema": { "type": "integer", "minimum": 0, "default": 0 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "Advance using nextAfterSequence; stop at an empty events array.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/EventPage" } } } },
+          "404": { "$ref": "#/components/responses/Problem" }, "default": { "$ref": "#/components/responses/Problem" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "AgentBearer": { "type": "http", "scheme": "bearer", "description": "Opaque credential mapped to server-side grants. Cannot authenticate as a human approver." },
+      "HumanSession": { "type": "apiKey", "in": "cookie", "name": "gateway_session", "description": "Authenticated human session. All mutations require valid Origin and a session-bound X-CSRF-Token. Never mint from a client-supplied role." }
+    },
+    "parameters": {
+      "RequestId": { "name": "requestId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Id" } },
+      "BasketId": { "name": "basketId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Id" } },
+      "EvaluationId": { "name": "evaluationId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Id" } },
+      "OrderId": { "name": "orderId", "in": "path", "required": true, "schema": { "$ref": "#/components/schemas/Id" } },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "description": "UUID, bound to authenticated principal, tenant, method, path, body and expected basket version for at least 24h.", "schema": { "$ref": "#/components/schemas/Id" } },
+      "ExpectedVersion": { "name": "X-Expected-Basket-Version", "in": "header", "required": true, "description": "Basket content version, for example 1. This is not a full-representation HTTP ETag.", "schema": { "type": "integer", "minimum": 1 } },
+      "RequiredCsrf": { "name": "X-CSRF-Token", "in": "header", "required": true, "schema": { "type": "string", "minLength": 32, "maxLength": 256 } },
+      "ConditionalCsrf": { "name": "X-CSRF-Token", "in": "header", "required": false, "description": "Required for HumanSession authentication; not required for AgentBearer. The server enforces this conditional requirement and the Origin check.", "schema": { "type": "string", "minLength": 32, "maxLength": 256 } }
+    },
+    "headers": {
+      "BasketVersion": { "description": "Basket content version. Responses use Cache-Control: no-store; no full-representation HTTP ETag is provided.", "schema": { "type": "integer", "minimum": 1 } },
+      "RetryAfter": { "description": "Integer seconds on RATE_LIMITED or REQUEST_IN_PROGRESS.", "schema": { "type": "integer", "minimum": 1 } }
+    },
+    "requestBodies": {
+      "BasketInput": { "required": true, "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BasketInput" }, "example": { "lines": [{ "productId": "460000", "salesUnit": "RAS", "quantity": 10 }] } } } }
+    },
+    "responses": {
+      "Problem": {
+        "description": "RFC 9457 error. See gateway-contract.md for code/status mapping. Retry-After is emitted only where applicable.",
+        "headers": { "Retry-After": { "$ref": "#/components/headers/RetryAfter" } },
+        "content": { "application/problem+json": { "schema": { "$ref": "#/components/schemas/Problem" }, "example": { "type": "urn:aimo-gateway:problem:approval-required", "title": "Human approval required", "status": 409, "code": "APPROVAL_REQUIRED", "detail": "The active evaluation requires an authorized human decision.", "instance": "/v1/orders", "traceId": "demo-trace-001" } } }
+      }
+    },
+    "schemas": {
+      "Id": { "type": "string", "format": "uuid" },
+      "Timestamp": { "type": "string", "format": "date-time", "pattern": "Z$", "description": "Gateway RFC 3339 UTC timestamp after adapter normalization; not the upstream wire format. Accept explicit upstream offsets including +HHMM; unambiguous offset-free times use Europe/Helsinki." },
+      "DeliveryDate": { "type": "string", "format": "date", "description": "ISO date interpreted in Europe/Helsinki; past dates are rejected semantically." },
+      "MinorAmount": { "type": "integer", "minimum": 0, "maximum": 1000000000000, "description": "EUR cents. Budget comparisons use VAT-inclusive goods totals." },
+      "Decimal": { "type": "string", "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,6})?$", "maxLength": 24, "description": "Nonnegative exact decimal. Parse numeric tokens directly into a decimal type with no IEEE754 intermediate. Unsupported precision is rejected, not silently truncated." },
+      "SalesUnit": { "type": "string", "minLength": 1, "maxLength": 16, "description": "Exact technical sales-unit code from the catalog, e.g. RAS or KI. Never infer it from comparisonUnit." },
+      "Mode": { "type": "string", "enum": ["live", "fixture"], "description": "Deployment-selected evidence mode; both modes use local mock order commitment." },
+      "Constraints": {
+        "type": "object", "additionalProperties": false, "required": ["dietaryConfirmed", "excludedAllergens", "dietaryRequirements"],
+        "properties": {
+          "dietaryConfirmed": { "const": true, "type": "boolean", "description": "Recorded through a human-only request endpoint, never asserted by an agent." },
+          "excludedAllergens": { "type": "array", "maxItems": 14, "uniqueItems": true, "items": { "type": "string", "enum": ["gluten_cereals", "crustaceans", "eggs", "fish", "peanuts", "soybeans", "milk", "nuts", "celery", "mustard", "sesame", "sulphites", "lupin", "molluscs"] } },
+          "dietaryRequirements": { "type": "array", "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "enum": ["lactose_free", "gluten_free", "vegan", "vegetarian"] } }
+        }
+      },
+      "RequestInput": {
+        "type": "object", "additionalProperties": false,
+        "required": ["brief", "deliverySiteId", "requestedDeliveryDate", "maxGrossMinor", "constraints"],
+        "properties": {
+          "brief": { "type": "string", "minLength": 1, "maxLength": 2000, "description": "Untrusted text; not executable instructions or a policy override." },
+          "deliverySiteId": { "type": "string", "minLength": 1, "maxLength": 100 },
+          "requestedDeliveryDate": { "$ref": "#/components/schemas/DeliveryDate" },
+          "maxGrossMinor": { "$ref": "#/components/schemas/MinorAmount" },
+          "constraints": { "$ref": "#/components/schemas/Constraints" },
+          "servings": { "type": "integer", "minimum": 1, "maximum": 10000 }
+        }
+      },
+      "PurchasingRequest": {
+        "type": "object", "additionalProperties": false, "required": ["id", "customerId", "createdBy", "createdAt", "status", "intent"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Id" }, "customerId": { "type": "string" }, "createdBy": { "type": "string" }, "createdAt": { "$ref": "#/components/schemas/Timestamp" },
+          "status": { "type": "string", "enum": ["active", "cancelled", "ordered_mock"] }, "intent": { "$ref": "#/components/schemas/RequestInput" }
+        }
+      },
+      "ProductEvidence": {
+        "type": "object", "additionalProperties": false, "required": ["constraint", "state", "sourceRefs"],
+        "properties": {
+          "constraint": { "type": "string", "description": "Dietary name or excludes:<allergen>, such as lactose_free or excludes:milk." },
+          "state": { "type": "string", "enum": ["supported", "contradicted", "unknown"] },
+          "sourceRefs": { "type": "array", "items": { "type": "string" }, "description": "Catalog field/reviewed fixture references, not model-generated proof. No source implies unknown, never supported." }
+        }
+      },
+      "Product": {
+        "type": "object", "additionalProperties": false, "required": ["productId", "name", "salesUnit", "constraintEvidence"],
+        "properties": {
+          "productId": { "type": "string", "minLength": 1, "maxLength": 64 }, "name": { "type": "string" }, "salesUnit": { "$ref": "#/components/schemas/SalesUnit" },
+          "packDescription": { "type": "string" }, "constraintEvidence": { "type": "array", "items": { "$ref": "#/components/schemas/ProductEvidence" } }
+        }
+      },
+      "ProductSearch": {
+        "type": "object", "additionalProperties": false, "required": ["catalogVersion", "products"],
+        "properties": { "catalogVersion": { "type": "string" }, "products": { "type": "array", "maxItems": 50, "items": { "$ref": "#/components/schemas/Product" } } }
+      },
+      "BasketLineInput": {
+        "type": "object", "additionalProperties": false, "required": ["productId", "salesUnit", "quantity"],
+        "properties": {
+          "productId": { "type": "string", "minLength": 1, "maxLength": 64 }, "salesUnit": { "$ref": "#/components/schemas/SalesUnit" },
+          "quantity": { "type": "integer", "minimum": 1, "maximum": 10000, "description": "Integer sales units; fractional/variable-weight ordering unsupported in v1." }
+        }
+      },
+      "BasketInput": {
+        "type": "object", "additionalProperties": false, "required": ["lines"],
+        "properties": { "lines": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/components/schemas/BasketLineInput" }, "description": "Product IDs must be unique; this cross-item invariant is checked server-side." } }
+      },
+      "Basket": {
+        "type": "object", "additionalProperties": false, "required": ["id", "requestId", "version", "state", "lines"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Id" }, "requestId": { "$ref": "#/components/schemas/Id" }, "version": { "type": "integer", "minimum": 1 },
+          "state": { "type": "string", "enum": ["draft", "blocked", "awaiting_approval", "ready", "rejected", "expired", "cancelled", "ordered_mock"] },
+          "lines": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/components/schemas/BasketLineInput" } },
+          "activeEvaluationId": { "$ref": "#/components/schemas/Id" }, "orderId": { "$ref": "#/components/schemas/Id" }
+        }
+      },
+      "ReasonCode": {
+        "type": "string", "enum": ["REQUEST_BUDGET_EXCEEDED", "ORDER_LIMIT_EXCEEDED", "DAILY_LIMIT_EXCEEDED", "APPROVAL_THRESHOLD_EXCEEDED", "PRODUCT_NOT_ELIGIBLE", "DIETARY_CONFLICT", "DIETARY_UNCONFIRMED", "UNIT_UNCONFIRMED", "PRICE_UNAVAILABLE", "PRICE_CHANGED", "QUANTITY_UNCONFIRMED", "INSUFFICIENT_STOCK", "SALES_BLOCK", "DELIVERY_UNAVAILABLE", "DELIVERY_UNCONFIRMED", "DELIVERY_DATE_MISMATCH", "CUTOFF_PASSED", "AUTHORITY_REVOKED"]
+      },
+      "Reason": {
+        "type": "object", "additionalProperties": false, "required": ["code", "message"],
+        "properties": { "code": { "$ref": "#/components/schemas/ReasonCode" }, "message": { "type": "string", "maxLength": 500 }, "productId": { "type": "string" } }
+      },
+      "LinePricing": {
+        "type": "object", "additionalProperties": false, "required": ["unitNet", "unitGross", "taxRate", "netMinor", "grossMinor", "taxMinor", "netPriceFound"],
+        "properties": {
+          "unitNet": { "$ref": "#/components/schemas/Decimal" }, "unitGross": { "$ref": "#/components/schemas/Decimal" }, "taxRate": { "$ref": "#/components/schemas/Decimal", "description": "Percent, not a fraction; e.g. 13.5 means 13.5 percent. Server validates the range 0-100 and supplied tax consistency." },
+          "netMinor": { "$ref": "#/components/schemas/MinorAmount" }, "grossMinor": { "$ref": "#/components/schemas/MinorAmount" }, "taxMinor": { "$ref": "#/components/schemas/MinorAmount" }, "netPriceFound": { "type": "boolean" }
+        }
+      },
+      "LineAvailability": {
+        "type": "object", "additionalProperties": false, "required": ["logisticModel", "quantityConfirmed", "salesUnit", "salesBlock"],
+        "properties": {
+          "logisticModel": { "type": "string", "enum": ["Stock", "Terminal", "Unknown"], "description": "Normalized model. Null, missing or unrecognized upstream codes map to Unknown and block commitment." }, "quantityConfirmed": { "type": "boolean" }, "salesUnit": { "$ref": "#/components/schemas/SalesUnit" }, "salesBlock": { "type": "boolean" },
+          "availableQuantity": { "$ref": "#/components/schemas/Decimal", "description": "Omitted whenever quantityConfirmed is false; the 999999 sentinel is never confirmed quantity, even on a non-Terminal record." },
+          "availableDate": { "$ref": "#/components/schemas/DeliveryDate" }, "closingTime": { "$ref": "#/components/schemas/Timestamp" }
+        },
+        "allOf": [
+          { "if": { "properties": { "logisticModel": { "enum": ["Terminal", "Unknown"] } } }, "then": { "properties": { "quantityConfirmed": { "const": false } } } },
+          { "if": { "properties": { "quantityConfirmed": { "const": false } } }, "then": { "not": { "required": ["availableQuantity"], "properties": { "availableQuantity": { "$ref": "#/components/schemas/Decimal" } } } }, "else": { "required": ["availableQuantity"], "properties": { "availableQuantity": { "$ref": "#/components/schemas/Decimal" } } } }
+        ]
+      },
+      "EvaluatedLine": {
+        "type": "object", "additionalProperties": false, "required": ["productId", "name", "salesUnit", "quantity", "reasons", "constraintEvidence"],
+        "properties": {
+          "productId": { "type": "string" }, "name": { "type": "string" }, "salesUnit": { "$ref": "#/components/schemas/SalesUnit" }, "quantity": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "pricing": { "$ref": "#/components/schemas/LinePricing" }, "availability": { "$ref": "#/components/schemas/LineAvailability" },
+          "constraintEvidence": { "type": "array", "items": { "$ref": "#/components/schemas/ProductEvidence" } }, "reasons": { "type": "array", "items": { "$ref": "#/components/schemas/Reason" } }
+        }
+      },
+      "ConfirmedAvailability": {
+        "allOf": [
+          { "$ref": "#/components/schemas/LineAvailability" },
+          {
+            "type": "object", "required": ["availableQuantity", "availableDate", "closingTime"],
+            "properties": {
+              "logisticModel": { "const": "Stock" }, "quantityConfirmed": { "const": true }, "salesBlock": { "const": false },
+              "availableQuantity": { "$ref": "#/components/schemas/Decimal" }, "availableDate": { "$ref": "#/components/schemas/DeliveryDate" }, "closingTime": { "$ref": "#/components/schemas/Timestamp" }
+            }
+          }
+        ]
+      },
+      "PricedLine": {
+        "allOf": [
+          { "$ref": "#/components/schemas/EvaluatedLine" },
+          { "type": "object", "required": ["pricing", "availability"], "properties": { "pricing": { "$ref": "#/components/schemas/LinePricing" }, "availability": { "$ref": "#/components/schemas/ConfirmedAvailability" }, "reasons": { "type": "array", "maxItems": 0, "items": { "$ref": "#/components/schemas/Reason" } } } }
+        ]
+      },
+      "Totals": {
+        "type": "object", "additionalProperties": false, "required": ["currency", "basis", "netMinor", "grossMinor", "taxMinor"],
+        "properties": { "currency": { "const": "EUR", "type": "string" }, "basis": { "const": "goods_only", "type": "string" }, "netMinor": { "$ref": "#/components/schemas/MinorAmount" }, "grossMinor": { "$ref": "#/components/schemas/MinorAmount" }, "taxMinor": { "$ref": "#/components/schemas/MinorAmount" } }
+      },
+      "Evaluation": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "basketId", "basketVersion", "requestId", "customerId", "policyVersion", "catalogVersion", "mode", "checkedAt", "expiresAt", "evidenceId", "outcome", "lines", "reasons"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Id" }, "basketId": { "$ref": "#/components/schemas/Id" }, "basketVersion": { "type": "integer", "minimum": 1 }, "requestId": { "$ref": "#/components/schemas/Id" },
+          "customerId": { "type": "string" }, "policyVersion": { "type": "string" }, "catalogVersion": { "type": "string" }, "mode": { "$ref": "#/components/schemas/Mode" },
+          "checkedAt": { "$ref": "#/components/schemas/Timestamp" }, "expiresAt": { "$ref": "#/components/schemas/Timestamp" }, "evidenceId": { "$ref": "#/components/schemas/Id", "description": "Protected server-side immutable adapter evidence, not a public URL or a verification credential." },
+          "outcome": { "type": "string", "enum": ["allowed", "approval_required", "blocked"] },
+          "lines": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/components/schemas/EvaluatedLine" } },
+          "totals": { "$ref": "#/components/schemas/Totals" }, "reasons": { "type": "array", "items": { "$ref": "#/components/schemas/Reason" } }
+        },
+        "allOf": [{ "if": { "properties": { "outcome": { "enum": ["allowed", "approval_required"] } } }, "then": { "required": ["totals"], "properties": { "totals": { "$ref": "#/components/schemas/Totals" }, "lines": { "items": { "$ref": "#/components/schemas/PricedLine" } } } } }],
+        "examples": [{
+          "id": "33333333-3333-4333-8333-333333333333", "basketId": "22222222-2222-4222-8222-222222222222", "basketVersion": 1, "requestId": "11111111-1111-4111-8111-111111111111",
+          "customerId": "demo-customer", "policyVersion": "demo-policy-1", "catalogVersion": "demo-catalog-1", "mode": "fixture", "checkedAt": "2026-11-14T08:00:00Z", "expiresAt": "2026-11-14T08:02:00Z", "evidenceId": "44444444-4444-4444-8444-444444444444", "outcome": "allowed",
+          "lines": [{
+            "productId": "460000", "name": "Synthetic example product", "salesUnit": "RAS", "quantity": 10,
+            "pricing": { "unitNet": "1.96", "unitGross": "2.22", "taxRate": "13.5", "netMinor": 1960, "grossMinor": 2220, "taxMinor": 260, "netPriceFound": false },
+            "availability": { "logisticModel": "Stock", "quantityConfirmed": true, "salesUnit": "RAS", "salesBlock": false, "availableQuantity": "48", "availableDate": "2026-11-16", "closingTime": "2026-11-15T15:00:00Z" }, "constraintEvidence": [], "reasons": []
+          }],
+          "totals": { "currency": "EUR", "basis": "goods_only", "netMinor": 1960, "grossMinor": 2220, "taxMinor": 260 }, "reasons": []
+        }]
+      },
+      "DecisionInput": {
+        "type": "object", "additionalProperties": false, "required": ["decision"],
+        "properties": { "decision": { "type": "string", "enum": ["approve", "reject"] }, "comment": { "type": "string", "maxLength": 500 } }
+      },
+      "Decision": {
+        "type": "object", "additionalProperties": false, "required": ["id", "evaluationId", "decision", "actorId", "createdAt", "expiresAt"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Id" }, "evaluationId": { "$ref": "#/components/schemas/Id" }, "decision": { "type": "string", "enum": ["approve", "reject"] },
+          "actorId": { "type": "string" }, "createdAt": { "$ref": "#/components/schemas/Timestamp" }, "expiresAt": { "$ref": "#/components/schemas/Timestamp" }, "comment": { "type": "string", "maxLength": 500 }
+        }
+      },
+      "OrderInput": {
+        "type": "object", "additionalProperties": false, "required": ["evaluationId"], "properties": { "evaluationId": { "$ref": "#/components/schemas/Id" } }
+      },
+      "Order": {
+        "type": "object", "additionalProperties": false, "required": ["id", "requestId", "evaluationId", "commitEvidenceId", "status", "mode", "committedBy", "committedAt", "deliverySiteId", "requestedDeliveryDate", "lines", "totals"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Id" }, "requestId": { "$ref": "#/components/schemas/Id" }, "evaluationId": { "$ref": "#/components/schemas/Id" }, "commitEvidenceId": { "$ref": "#/components/schemas/Id", "description": "Immutable evidence of final upstream rechecks; separate from the evaluation snapshot." }, "status": { "type": "string", "const": "ordered_mock" }, "mode": { "$ref": "#/components/schemas/Mode" },
+          "committedBy": { "type": "string" }, "committedAt": { "$ref": "#/components/schemas/Timestamp" }, "deliverySiteId": { "type": "string" }, "requestedDeliveryDate": { "$ref": "#/components/schemas/DeliveryDate" },
+          "lines": { "type": "array", "minItems": 1, "maxItems": 50, "items": { "$ref": "#/components/schemas/PricedLine" } }, "totals": { "$ref": "#/components/schemas/Totals" }
+        }
+      },
+      "AuditEvent": {
+        "type": "object", "additionalProperties": false, "required": ["id", "sequence", "requestId", "type", "actorId", "at", "summary", "traceId", "reasonCodes"],
+        "properties": {
+          "id": { "$ref": "#/components/schemas/Id" }, "sequence": { "type": "integer", "minimum": 1 }, "requestId": { "$ref": "#/components/schemas/Id" },
+          "type": { "type": "string", "enum": ["request.created", "request.cancelled", "basket.created", "basket.replaced", "basket.evaluated", "evaluation.decided", "order.attempted", "order.refused", "order.created"] },
+          "actorId": { "type": "string" }, "at": { "$ref": "#/components/schemas/Timestamp" }, "summary": { "type": "string", "maxLength": 500 }, "traceId": { "type": "string" },
+          "reasonCodes": { "type": "array", "items": { "type": "string" } }, "basketId": { "$ref": "#/components/schemas/Id" }, "evaluationId": { "$ref": "#/components/schemas/Id" }, "orderId": { "$ref": "#/components/schemas/Id" }
+        }
+      },
+      "EventPage": {
+        "type": "object", "additionalProperties": false, "required": ["events", "nextAfterSequence"],
+        "properties": { "events": { "type": "array", "maxItems": 100, "items": { "$ref": "#/components/schemas/AuditEvent" } }, "nextAfterSequence": { "type": "integer", "minimum": 0 } }
+      },
+      "Problem": {
+        "type": "object", "additionalProperties": false, "required": ["type", "title", "status", "code", "detail", "instance", "traceId"],
+        "properties": {
+          "type": { "type": "string", "format": "uri" }, "title": { "type": "string", "maxLength": 120 }, "status": { "type": "integer", "minimum": 400, "maximum": 599 },
+          "code": { "type": "string", "enum": ["MALFORMED_REQUEST", "INVALID_INPUT", "UNAUTHENTICATED", "FORBIDDEN", "NOT_FOUND", "METHOD_NOT_ALLOWED", "INTERNAL_ERROR", "IDEMPOTENCY_CONFLICT", "REQUEST_IN_PROGRESS", "REQUEST_ALREADY_ORDERED", "REQUEST_CANCELLED", "EVALUATION_SUPERSEDED", "DECISION_ALREADY_RECORDED", "EVALUATION_REQUIRED", "APPROVAL_REQUIRED", "POLICY_BLOCKED", "EVALUATION_EXPIRED", "VERSION_CONFLICT", "PRECONDITION_REQUIRED", "RATE_LIMITED", "UPSTREAM_INVALID", "UPSTREAM_UNAVAILABLE", "UPSTREAM_CLOCK_UNTRUSTED"] },
+          "detail": { "type": "string", "maxLength": 500 }, "instance": { "type": "string", "format": "uri-reference" }, "traceId": { "type": "string", "maxLength": 100 }
+        }
+      }
+    }
+  }
+}

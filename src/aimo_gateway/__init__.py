@@ -1,0 +1,1 @@
+"""Owner-controlled purchasing gateway for the synthetic Valio Aimo challenge."""

@@ -1,0 +1,19 @@
+Illustrative food photographs shipped with this prototype. They are not catalog
+product images, customer photographs, or evidence of a particular purchase.
+
+images/vegetable-pie.jpg
+  Subject: mixed-vegetable quiche, used only as an illustrative savory vegetable-pie photo.
+  Source: https://commons.wikimedia.org/wiki/File:Mixed_vegetables_quiche.jpg
+  Creator: E4024
+  License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+  Changes: none. Displayed with a fixed crop in the page layout.
+
+images/sweet-pie.jpg
+  Subject: apple pie, used only as an illustrative sweet-pie photo.
+  Source: https://commons.wikimedia.org/wiki/File:Apple_pie_24.jpg
+  Creator: Shisma
+  License: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/)
+  Changes: none. Displayed with a fixed crop in the page layout.
+
+Product rows use an image only when the workspace response supplies imageUrl.
+A missing product image stays an honest placeholder.
