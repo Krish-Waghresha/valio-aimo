@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face { font-family: "Barlow Condensed"; src: url("../src/aimo_gateway/static/fonts/barlow-condensed-700.woff2") format("woff2"); font-weight: 700; }
+  @font-face { font-family: "DM Sans"; src: url("../src/aimo_gateway/static/fonts/dm-sans-400.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "DM Sans"; src: url("../src/aimo_gateway/static/fonts/dm-sans-700.woff2") format("woff2"); font-weight: 700; }
+  :root { --teal: #005670; --lime: #C0E021; --amber: #FDDB32; --red: #F9423A; --ink: #020b0e; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); }
+  #stage { position: absolute; inset: 0; overflow: hidden; font-family: "DM Sans", sans-serif; color: #fff; }
+  .layer { position: absolute; inset: 0; overflow: hidden; }
+  .bg-black { background: radial-gradient(circle at 50% 55%, #0a3542 0%, #020b0e 72%); }
+  .bg-teal { background: radial-gradient(circle at 30% 25%, #0b7393 0%, #005670 45%, #00303d 100%); }
+  .center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .huge { font-family: "Barlow Condensed", sans-serif; font-weight: 700; line-height: .95; }
+  .w { display: inline-block; }
+  .lime { color: var(--lime); }
+  .kicker { font-size: 30px; letter-spacing: .22em; text-transform: uppercase; color: #9fc3cf; font-weight: 700; }
+  .grain { position: absolute; inset: 0; opacity: .05; background-image: repeating-linear-gradient(0deg, #fff 0 1px, transparent 1px 3px); }
+  .card { width: 430px; padding: 34px 38px; margin: 0 20px; border: 2px solid rgba(255,255,255,.28); text-align: left; position: relative; background: rgba(255,255,255,.03); }
+  .card .y { font-size: 28px; color: #9fc3cf; letter-spacing: .12em; }
+  .card .l { font-family: "Barlow Condensed"; font-size: 96px; margin-top: 6px; }
+  .row { display: flex; justify-content: center; align-items: stretch; }
+  .box { border: 3px solid rgba(255,255,255,.25); background: rgba(255,255,255,.05); padding: 26px 30px; text-align: left; position: absolute; }
+  .box .t { font-family: "Barlow Condensed"; font-size: 54px; line-height: 1; }
+  .box .s { font-size: 24px; color: #cfe3e9; margin-top: 10px; line-height: 1.4; }
+  .chip { display: inline-block; margin: 8px 8px 0 0; padding: 6px 14px; border-radius: 20px; font-size: 22px; font-weight: 700; background: rgba(192,224,33,.14); color: var(--lime); }
+  .rule { width: 520px; margin: 0 20px; padding: 40px; background: rgba(255,255,255,.06); border-top: 12px solid; text-align: left; }
+  .rule .h { font-family: "Barlow Condensed"; font-size: 100px; }
+  .rule .d { font-size: 34px; margin-top: 12px; color: #dcebef; line-height: 1.35; }
+  .shot { position: absolute; left: 0; top: 0; transform-origin: 0 0; border-radius: 10px; box-shadow: 0 30px 90px rgba(0,0,0,.6); }
+  .cap { position: absolute; left: 0; right: 0; bottom: 0; height: 170px; background: linear-gradient(180deg, rgba(2,11,14,0) 0%, rgba(2,11,14,.86) 45%); }
+  .cap .txt { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); white-space: nowrap; font: 700 48px "DM Sans", sans-serif; color: #fff; text-shadow: 0 2px 14px rgba(0,0,0,.7); }
+  .tag { position: absolute; left: 60px; bottom: 44px; display: flex; align-items: center; gap: 12px; padding: 8px 16px 8px 10px; background: var(--lime); color: #003747; font: 700 24px "DM Sans", sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+  .flag { width: 42px; height: 28px; display: inline-block; box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+  const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+  const smooth = (x) => { x = clamp(x); return x * x * (3 - 2 * x); };
+  const appear = (t, at, dur = 0.22) => ease((t - at) / dur);
+  const stage = document.getElementById("stage");
+  let FILM = null;
+
+  const FLAGS = {
+    in: `<svg class="flag" viewBox="0 0 30 20"><rect width="30" height="20" fill="#fff"/><rect width="30" height="6.67" fill="#FF9933"/><rect y="13.33" width="30" height="6.67" fill="#138808"/><circle cx="15" cy="10" r="2.6" fill="none" stroke="#000080" stroke-width=".7"/><circle cx="15" cy="10" r=".5" fill="#000080"/></svg>`,
+    pl: `<svg class="flag" viewBox="0 0 30 20"><rect width="30" height="10" fill="#fff"/><rect y="10" width="30" height="10" fill="#DC143C"/></svg>`,
+  };
+
+  function at(words, pattern, fallback) {
+    const re = new RegExp(pattern, "i");
+    const hit = words.find((w) => re.test(w.word));
+    return hit ? hit.start : fallback;
+  }
+  function kinetic(words, t, opts = {}) {
+    const hot = opts.highlight || [];
+    return words.map((w) => {
+      const a = appear(t, w.start - 0.06, 0.18);
+      const isHot = hot.some((h) => new RegExp(h, "i").test(w.word));
+      return `<span class="w ${isHot ? "lime" : ""}" style="opacity:${a};transform:translateY(${(1 - a) * 26}px) scale(${isHot ? 1 + 0.25 * (1 - a) : 1})">${w.word}</span>`;
+    }).join(" ");
+  }
+
+  // ---------- scenes ----------
+  const scenes = {
+    hook(t, s) {
+      const q = at(s.words, "next", 1.2);
+      return `<div class="center bg-black" style="transform:scale(${1 + t * 0.02})"><div class="huge" style="font-size:150px;max-width:1600px">${kinetic(s.words, t, { highlight: ["wholesale", "order"] })}</div></div><div class="grain"></div>`;
+    },
+    history(t, s) {
+      const items = [["1960s", "Phone call", at(s.words, "phone", 1.4)], ["1990s", "Catalog", at(s.words, "catalog", 2.4)], ["2010s", "Webshop", at(s.words, "webshop", 3.4)]];
+      const lead = s.words.filter((w) => w.start < items[0][2] - 0.25);
+      return `<div class="center bg-black"><div style="font-size:58px;margin-bottom:70px">${kinetic(lead, t, { highlight: ["person"] })}</div>
+        <div class="row">${items.map(([y, l, st]) => { const a = appear(t, st - 0.08, 0.25); return `<div class="card" style="opacity:${a};transform:translateY(${(1 - a) * 60}px) rotate(${(1 - a) * -4}deg)"><div class="y">${y}</div><div class="l">${l}</div></div>`; }).join("")}</div></div><div class="grain"></div>`;
+    },
+    agent(t, s) {
+      const big = at(s.words, "agent", 1.0), c1 = at(s.words, "sleeps", 2.0), c2 = at(s.words, "forgets", 2.8), c3 = at(s.words, "seconds", 3.8);
+      const a = appear(t, big - 0.05, 0.3);
+      const chip = (txt, st) => `<div class="chip" style="font-size:42px;padding:14px 30px;opacity:${appear(t, st - 0.15)};transform:translateY(${(1 - appear(t, st - 0.15)) * 20}px)">${txt}</div>`;
+      return `<div class="center bg-black"><div class="huge lime" style="font-size:${320 + 80 * (1 - a)}px;opacity:${a};letter-spacing:.03em">AI AGENT</div>
+        <div class="row" style="margin-top:50px;gap:28px">${chip("never sleeps", c1)}${chip("never forgets", c2)}${chip("orders in seconds", c3)}</div></div><div class="grain"></div>`;
+    },
+    hero(t, s) {
+      const w = s.words;
+      const split = at(w, "answer", 2.0);
+      const first = w.filter((x) => x.start < at(w, "^So$", split - 0.4) - 0.05);
+      const heroA = w.filter((x) => x.start >= split + 0.1 && x.start < at(w, "^On$", 99) - 0.05);
+      const heroB = w.filter((x) => x.start >= at(w, "^On$", 99) - 0.05);
+      const shift = smooth((t - 0.2) / 1.6), fade = appear(t, split - 0.2, 0.4);
+      const cap = (arr) => arr.map((x, i) => i ? x : { ...x, word: x.word[0].toUpperCase() + x.word.slice(1) });
+      return `<div class="center bg-black">
+        <div style="position:absolute;left:${50 - 22 * shift}%;top:50%;transform:translate(-50%,-50%);width:560px;height:560px;border-radius:50%;border:2px solid rgba(255,255,255,${0.3 - 0.2 * shift});opacity:${1 - fade * 0.8}"></div>
+        <div style="position:absolute;left:${50 + 22 * shift}%;top:50%;transform:translate(-50%,-50%);width:${560 * shift}px;height:${560 * shift}px;border-radius:50%;background:radial-gradient(circle, rgba(192,224,33,.4), rgba(192,224,33,0) 70%);opacity:${1 - fade * 0.5}"></div>
+        <div class="huge" style="font-size:120px;position:absolute;opacity:${1 - fade}">${kinetic(first, t, { highlight: ["moving"] })}</div>
+        <div style="position:relative;opacity:${fade}"><div class="kicker">Our answer</div>
+          <div class="huge" style="font-size:170px;margin-top:26px">${kinetic(cap(heroA), t)}</div>
+          <div class="huge lime" style="font-size:170px">${kinetic(heroB, t)}</div></div></div><div class="grain"></div>`;
+    },
+    scenarios(t, s) {
+      const items = [["1", "A big order", "1,000 L lactose-free milk · stock runs short · manager approves"], ["2", "A small order", "20 kg butter · under the limit · agent orders alone"], ["3", "An agent tries to cheat", "skip the manager · approve itself · refused"]];
+      return `<div class="center bg-black"><div class="kicker" style="opacity:${appear(t, 0)}">Let's see it in action</div>
+        <div style="display:grid;gap:22px;margin-top:40px;text-align:left">${items.map(([n, h, d], i) => { const a = appear(t, 0.35 + i * 0.45, 0.35); return `<div style="display:flex;align-items:center;gap:28px;opacity:${a};transform:translateX(${(1 - a) * -40}px)">
+          <span style="display:inline-grid;place-items:center;width:84px;height:84px;border-radius:50%;background:var(--lime);color:#003747;font:700 46px 'DM Sans'">${n}</span>
+          <div><div class="huge" style="font-size:72px">${h}</div><div style="font-size:28px;color:#cfe3e9">${d}</div></div></div>`; }).join("")}</div></div><div class="grain"></div>`;
+    },
+    question(t, s) {
+      const split = at(s.words, "^So$", 2.2);
+      const first = s.words.filter((w) => w.start < split - 0.05), rest = s.words.filter((w) => w.start >= split - 0.05 && !/^(So|Valio|Aimo|asked:?)$/i.test(w.word));
+      const shift = smooth((t - 0.2) / 1.6), fade = appear(t, split - 0.1, 0.35);
+      return `<div class="center bg-black">
+        <div style="position:absolute;left:${50 - 22 * shift}%;top:50%;transform:translate(-50%,-50%);width:560px;height:560px;border-radius:50%;border:2px solid rgba(255,255,255,${0.3 - 0.2 * shift});opacity:${1 - fade * 0.7}"></div>
+        <div style="position:absolute;left:${50 + 22 * shift}%;top:50%;transform:translate(-50%,-50%);width:${560 * shift}px;height:${560 * shift}px;border-radius:50%;background:radial-gradient(circle, rgba(192,224,33,.4), rgba(192,224,33,0) 70%);opacity:${1 - fade * 0.6}"></div>
+        <div class="huge" style="font-size:120px;position:relative;opacity:${1 - fade};position:absolute">${kinetic(first, t, { highlight: ["moving"] })}</div>
+        <div style="position:relative;opacity:${fade}"><div class="kicker">Valio Aimo asked</div>
+        <div class="huge" style="font-size:112px;max-width:1650px;margin-top:30px">${kinetic(rest.map((w, i) => i ? w : { ...w, word: w.word[0].toUpperCase() + w.word.slice(1) }), t, { highlight: ["losing", "control"] })}</div></div></div><div class="grain"></div>`;
+    },
+    title(t, s) {
+      const a = appear(t, 0, 0.45), b = appear(t, at(s.words, "Delusional\\b", 2.0) - 0.05, 0.35);
+      return `<div class="center bg-teal"><div class="kicker" style="opacity:${a}">Valio Aimo · Junction 2026</div>
+        <div class="huge" style="font-size:180px;margin-top:24px;opacity:${a};transform:scale(${1.06 - 0.06 * a})">Trusted <span class="lime">Trade</span> Agents</div>
+        <div class="huge" style="font-size:88px;margin-top:34px;opacity:${a}">The Delusionals</div>
+        <div class="row" style="margin-top:22px;gap:44px;font-size:38px;opacity:${a}"><span style="display:flex;gap:14px;align-items:center">${FLAGS.in} Krish Waghresha</span><span style="display:flex;gap:14px;align-items:center">${FLAGS.pl} Jakub Piotrowski</span></div>
+        <div style="font-size:34px;margin-top:34px;opacity:${b};color:#e4f2c0">…delusional enough to build it in 48 hours</div></div>`;
+    },
+    architecture(t, s, seg) {
+      const two = seg.visual.part === 2, w = s.words;
+      const cue = (pattern, fallback) => appear(t, at(w, pattern, fallback) - 0.12, 0.35);
+      // part 1 (gateway) reveals step by step; part 2 starts with the whole gateway visible
+      const head = two ? 1 : cue("things", 0.6);
+      const gw = two ? 1 : cue("Gateway", 1.0);
+      const st = two ? [1, 1, 1, 1] : [cue("^look", 3.2), cue("limits", 5.0), cue("approval", 6.2), cue("order", 7.2)];
+      const logged = two ? 1 : cue("^logs|logged", 9.0);
+      const anyAgent = two ? 1 : cue("^agent", 2.6);
+      const valio = two ? 1 : cue("^look", 3.2);
+      const ws = two ? cue("workspace", 0.6) : 0;
+      const chips = two ? [cue("says", 1.6), cue("sources", 2.6), cue("exceptions", 3.8), cue("person", 5.2)] : [0, 0, 0, 0];
+      const flow = two ? clamp((t - (at(w, "person", 5.2) + 0.2)) / 2.2) : -1;
+      const lit = (k, on) => on ? `border-color:${k};box-shadow:0 0 0 6px rgba(192,224,33,.12)` : "";
+      const node = (x, y, wdt, hgt, op, inner, extra = "") => `<div style="position:absolute;left:${x}px;top:${y}px;width:${wdt}px;height:${hgt}px;opacity:${op};border:3px solid rgba(255,255,255,.22);background:rgba(255,255,255,.045);border-radius:14px;${extra}">${inner}</div>`;
+      const badge = (n) => `<span style="display:inline-grid;place-items:center;width:46px;height:46px;border-radius:50%;background:var(--lime);color:#003747;font:700 28px 'DM Sans';margin-right:14px;vertical-align:middle">${n}</span>`;
+      const person = `<svg viewBox="0 0 64 64" width="70" height="70"><circle cx="32" cy="22" r="11" fill="none" stroke="#fff" stroke-width="4"/><path d="M12 56c2-12 10-18 20-18s18 6 20 18" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`;
+      const bot = `<svg viewBox="0 0 64 64" width="70" height="70"><rect x="12" y="18" width="40" height="32" rx="9" fill="none" stroke="#fff" stroke-width="4"/><circle cx="25" cy="34" r="4" fill="#C0E021"/><circle cx="39" cy="34" r="4" fill="#C0E021"/><path d="M32 18v-8" stroke="#fff" stroke-width="4" stroke-linecap="round"/></svg>`;
+      const stations = ["Look up", "Check limits", "Approve", "Order"];
+      const stationsHtml = stations.map((label, i) => `<div style="flex:1;padding:18px 10px;text-align:center;border-radius:10px;background:${st[i] > 0.5 ? "rgba(192,224,33,.16)" : "rgba(255,255,255,.04)"};border:2px solid ${st[i] > 0.5 ? "var(--lime)" : "rgba(255,255,255,.18)"};opacity:${st[i]};font:700 26px 'DM Sans';white-space:nowrap">${label}</div>`).join(`<div style="align-self:center;color:var(--lime);font-size:34px;opacity:${gw}">›</div>`);
+      // flow dot along chef -> workspace -> gateway -> Valio
+      const pts = [[180, 470], [560, 470], [1000, 470], [1430, 470], [1720, 470]];
+      let dot = "";
+      if (flow >= 0) { const seg = Math.min(pts.length - 2, Math.floor(flow * (pts.length - 1))); const k = flow * (pts.length - 1) - seg; const x = lerp(pts[seg][0], pts[seg + 1][0], k), y = lerp(pts[seg][1], pts[seg + 1][1], k);
+        dot = `<div style="position:absolute;left:${x - 14}px;top:${y - 14}px;width:28px;height:28px;border-radius:50%;background:var(--lime);box-shadow:0 0 30px 10px rgba(192,224,33,.5)"></div>`; }
+      const line = (x1, y1, x2, y2, op, dashed) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#C0E021" stroke-width="4" opacity="${op}" ${dashed ? 'stroke-dasharray="10 10"' : ""} marker-end="url(#arr)"/>`;
+      return `<div class="layer bg-black">
+        <div class="kicker" style="position:absolute;left:120px;top:84px;opacity:${head}">What we built</div>
+        <div class="huge" style="position:absolute;left:120px;top:130px;font-size:84px;opacity:${head}">Two parts. <span class="lime">One flow.</span></div>
+        <svg style="position:absolute;inset:0" width="1920" height="1080"><defs><marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#C0E021"/></marker></defs>
+          ${line(250, 470, 330, 470, ws)}${line(780, 470, 850, 470, ws)}${line(790, 745, 860, 650, anyAgent, true)}${line(1530, 470, 1570, 470, valio)}${line(1195, 660, 1195, 770, st[2])}</svg>
+        ${node(110, 400, 140, 140, ws, `<div style="display:grid;place-items:center;height:100%">${person}</div>`)}
+        <div style="position:absolute;left:110px;top:552px;width:140px;text-align:center;font:700 28px 'DM Sans';opacity:${ws}">Chef</div>
+        ${node(330, 330, 450, 280, ws, `<div style="padding:26px 28px"><div class="huge" style="font-size:52px">${badge(2)}Agent workspace</div>
+          <div style="margin-top:18px;font-size:26px;line-height:1.75">${["understands the request", "sources the products", "handles exceptions", "asks a human when it matters"].map((x, i) => `<div style="opacity:${chips[i]}">${chips[i] > 0.5 ? "<b style='color:var(--lime)'>✓</b> " : "· "}${x}</div>`).join("")}</div></div>`, lit("var(--lime)", two && ws > 0.5))}
+        ${node(330, 690, 450, 140, anyAgent, `<div style="display:flex;align-items:center;gap:18px;padding:30px 28px">${bot}<div><div class="huge" style="font-size:46px">Any AI agent</div><div style="font-size:24px;color:#cfe3e9">same open API</div></div></div>`)}
+        ${node(850, 300, 680, 360, gw, `<div style="padding:26px 28px"><div class="huge" style="font-size:60px">${badge(1)}Trusted Gateway</div><div style="font-size:24px;color:#cfe3e9;margin:6px 0 22px 60px">open, documented API · OpenAPI 3.1</div>
+          <div style="display:flex;gap:10px">${stationsHtml}</div><div style="margin-top:22px;font-size:26px;opacity:${logged}"><b style="color:var(--lime)">✓</b> every step logged</div></div>`, lit("var(--lime)", !two && gw > 0.5))}
+        ${node(1575, 380, 290, 180, valio, `<div style="padding:24px 26px"><div class="huge" style="font-size:50px">Valio Aimo</div><div style="font-size:24px;color:#cfe3e9;line-height:1.5;margin-top:6px">catalog · live price<br>live stock</div></div>`)}
+        ${node(985, 770, 420, 130, st[2], `<div style="display:flex;align-items:center;gap:16px;padding:18px 24px">${person.replace('width="70" height="70"', 'width="60" height="60"')}<div><div class="huge" style="font-size:40px;white-space:nowrap">Kitchen manager</div><div style="font-size:22px;color:#cfe3e9;white-space:nowrap">signs what's over the limit</div></div></div>`, "border-color:var(--amber)")}
+        ${dot}</div><div class="grain"></div>`;
+    },
+    terminal(t, s) {
+      const lines = FILM.terminal;
+      const step = Math.max(0.3, (s.duration - 1.2) / Math.max(1, lines.length));
+      const shown = lines.filter((_, i) => t >= 0.2 + i * step);
+      const color = (l) => l.startsWith("✗") ? "#ff8a84" : l.startsWith("#") ? "#7f9aa3" : /^(GET|POST)/.test(l) ? "#5fd3e6" : /^Both refused/.test(l) ? "#C0E021" : "#e6f1f4";
+      const nope = appear(t, at(s.words, "nope", s.duration - 0.8) - 0.05, 0.2);
+      return `<div class="layer" style="background:#0b1418"><div style="position:absolute;left:210px;top:70px;width:1500px;background:#0f1f26;border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.6);overflow:hidden">
+        <div style="height:46px;background:#16303a;display:flex;align-items:center;gap:10px;padding:0 18px"><span style="width:14px;height:14px;border-radius:50%;background:#ff5f57"></span><span style="width:14px;height:14px;border-radius:50%;background:#febc2e"></span><span style="width:14px;height:14px;border-radius:50%;background:#28c840"></span><span style="margin-left:18px;color:#9fc3cf;font:22px ui-monospace,Menlo,monospace">hotel-buyer-agent → Valio Aimo gateway (open API)</span></div>
+        <div style="padding:30px 40px;font:34px/1.62 ui-monospace,Menlo,monospace;min-height:560px">${shown.map((l) => `<div style="color:${color(l)}">${l.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</div>`).join("")}</div></div>
+        <div class="huge" style="position:absolute;right:170px;top:500px;font-size:${200 + 120 * (1 - nope)}px;color:var(--red);opacity:${nope};transform:rotate(-8deg)">NOPE.</div></div>`;
+    },
+    rules(t, s) {
+      const cols = [["Alone", "Up to €500 · e.g. butter, €42", "var(--lime)", at(s.words, "small", 0.8)], ["Humans sign", "Over the limit · e.g. milk, €1,150", "var(--amber)", at(s.words, "Humans", 1.9)], ["Never", "Approve itself · stale price · guess allergens", "var(--red)", at(s.words, "never", 3.4)]];
+      return `<div class="center bg-black"><div class="row">${cols.map(([h, d, c, st]) => { const a = appear(t, st - 0.1, 0.3); return `<div class="rule" style="border-color:${c};opacity:${a};transform:translateY(${(1 - a) * 50}px)"><div class="h">${h}</div><div class="d">${d}</div></div>`; }).join("")}</div>
+        <div style="font-size:44px;margin-top:70px;opacity:${appear(t, at(s.words, "bend", 4.4) - 0.2)}">Enforced by the gateway — <b class="lime">not</b> by the agent's good manners</div></div><div class="grain"></div>`;
+    },
+    moving(t, s) {
+      const shift = smooth((t - at(s.words, "center", 2) + 0.2) / 1.2);
+      return `<div class="center bg-black">
+        <div style="position:absolute;left:${50 - 20 * shift}%;top:50%;transform:translate(-50%,-50%);width:560px;height:560px;border-radius:50%;border:2px solid rgba(255,255,255,${0.35 - 0.25 * shift})"><div style="position:absolute;bottom:-60px;width:100%;text-align:center;font-size:30px;color:#9fc3cf">webshop</div></div>
+        <div style="position:absolute;left:${50 + 20 * shift}%;top:50%;transform:translate(-50%,-50%);width:${560 * shift}px;height:${560 * shift}px;border-radius:50%;background:radial-gradient(circle, rgba(192,224,33,.4), rgba(192,224,33,0) 70%)"></div>
+        <div class="huge" style="font-size:118px;max-width:1500px;position:relative">${kinetic(s.words, t, { highlight: ["gravity", "moving"] })}</div></div><div class="grain"></div>`;
+    },
+    end(t, s, seg) {
+      const second = seg.id !== FILM.segments.find((x) => x.visual.scene === "end").id;
+      const first = FILM.segments.find((x) => x.visual.scene === "end");
+      const tt = second ? t + (seg.start - first.start) : t;
+      const lineA = first.words, lineB = second ? s.words : [];
+      const team = second ? appear(t, s.speech + 0.1, 0.5) : 0;
+      return `<div class="center bg-teal"><div class="huge" style="font-size:170px">${kinetic(lineA, tt)}</div>
+        <div class="huge lime" style="font-size:170px;min-height:162px">${kinetic(lineB, t)}</div>
+        <div style="opacity:${team};margin-top:40px"><div class="huge" style="font-size:72px">THE DELUSIONALS</div>
+          <div class="row" style="gap:40px;font-size:34px;margin-top:14px"><span style="display:flex;gap:12px;align-items:center">${FLAGS.in} Krish Waghresha</span><span style="display:flex;gap:12px;align-items:center">${FLAGS.pl} Jakub Piotrowski</span></div>
+          </div></div>`;
+    },
+  };
+
+  // ---------- camera over real screenshots ----------
+  // Each step: [screenshot, element to zoom on (null = full screen), zoom ("fit" or number), weight].
+  // Rule: every zoom-in returns to the full screen before the next detail or the next shot.
+  const SHOTS = {
+    request: [["req_empty", null, 0, 0.6], ["req_t0", null, 0, 0.25], ["req_t1", null, 0, 0.25], ["req_t2", null, 0, 0.25], ["req_t3", null, 0, 0.25], ["req_t4", null, 0, 0.25], ["req_t5", null, 0, 0.5], ["req_reading", null, 0, 0.6], ["req_understood", null, 0, 1.6], ["req_ready", null, 0, 0.7]],
+    working: [["work_0", null, 0, 0.8], ["work_1", null, 0, 1.4]],
+    exception: [["exc_card", null, 0, 1.4], ["exc_hover", ".xoptions", "fit", 3.4], ["exc_waiting", null, 0, 1.0]],
+    approval: [["appr_page", null, 0, 0.7], ["appr_confirm", ".decision", "fit", 2.2], ["appr_placing", ".decision", "fit", 0.9], ["appr_placed", ".decision", "fit", 1.6]],
+    record: [["rec_log", null, 0, 1.2], ["rec_compare", null, 0, 1.4]],
+    butter: [["but_typed", null, 0, 0.8], ["but_understood", null, 0, 0.7], ["but_working", null, 0, 0.8], ["but_placed", null, 0, 1.4]],
+  };
+  const FULL_SCALE = 0.86;
+  const FULL = { s: FULL_SCALE, tx: (1920 - 1920 * FULL_SCALE) / 2, ty: 14 };
+  const VIEW = { w: 1920, h: 1080, focusY: 470, maxZoom: 2.4 };
+
+  function camera(meta, selector, zoom) {
+    if (!selector) return FULL;
+    const W = meta.width, H = meta.height;
+    const top = selector.startsWith("^");
+    const key = top ? selector.slice(1) : selector;
+    let box = meta.boxes[key];
+    if (!box) return FULL;
+    if (top) box = [box[0], box[1], box[2], Math.min(box[3], 430)];
+    let s = zoom === "fit" ? Math.min(VIEW.w * 0.8 / box[2], 800 / box[3]) : zoom;
+    s = clamp(s, 1.05, VIEW.maxZoom);
+    const cx = box[0] + box[2] / 2, cy = box[1] + box[3] / 2;
+    return { s, tx: clamp(VIEW.w / 2 - cx * s, VIEW.w - W * s, 0), ty: clamp(VIEW.focusY - cy * s, VIEW.h - H * s, 0) };
+  }
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const mix = (a, b, k) => ({ s: lerp(a.s, b.s, k), tx: lerp(a.tx, b.tx, k), ty: lerp(a.ty, b.ty, k) });
+  const sameFocus = (a, b) => a && b && a.sel === b.sel && a.zoom === b.zoom && a.sel;
+
+  function shotFrame(seg, t) {
+    const plan = SHOTS[seg.visual.shot];
+    const total = plan.reduce((sum, p) => sum + p[3], 0);
+    let acc = 0;
+    const steps = plan.map(([img, sel, zoom, weight]) => { const start = acc / total * seg.duration; acc += weight; return { img, sel, zoom, start, end: acc / total * seg.duration }; });
+    let i = steps.length - 1;
+    while (i > 0 && t < steps[i].start) i--;
+    const cur = steps[i], prev = steps[i - 1], next = steps[i + 1];
+    const meta = FILM.shots[cur.img];
+    const target = camera(meta, cur.sel, cur.zoom);
+    let cam = target;
+    if (cur.sel) {
+      const ramp = Math.min(1.5, (cur.end - cur.start) / 2.4);
+      const zin = sameFocus(prev, cur) ? 1 : smooth((t - cur.start) / ramp);
+      const zout = sameFocus(cur, next) ? 0 : smooth((t - (cur.end - ramp)) / ramp);
+      cam = mix(FULL, target, Math.min(zin, 1 - zout));
+    }
+    const fade = !prev || prev.img === cur.img ? 1 : smooth((t - cur.start) / 0.25);
+    const img = (m, op) => `<img class="shot" src="build/shots/${m.file}" style="width:${m.width}px;height:${m.height}px;opacity:${op};transform:translate(${cam.tx}px,${cam.ty}px) scale(${cam.s})">`;
+    return `<div class="layer" style="background:radial-gradient(circle at 50% 40%, #0d3442, #020b0e 75%)">${fade < 1 ? img(FILM.shots[prev.img], 1) : ""}${img(meta, fade)}</div>`;
+  }
+
+  function recFrame(seg, t) {
+    const fps = FILM.fps, rec = seg.visual.rec;
+    const n = Math.min(Math.floor((seg.recOffset + t) * fps), Math.floor(FILM.recs[rec].length * fps));
+    let cam = FULL;
+    const zoom = seg.visual.zoom, box = FILM.recs[rec].zoomBoxes[seg.id];
+    if (zoom && box) {
+      const a = zoom[0], b = zoom[1] < 0 ? seg.duration + zoom[1] : zoom[1], ramp = 1.5;
+      const k = Math.min(smooth((t - a) / ramp), 1 - smooth((t - (b - ramp)) / ramp));
+      cam = mix(FULL, camera({ width: 1920, height: 1080, boxes: { z: box } }, "z", "fit"), k);
+    }
+    return `<div class="layer" style="background:radial-gradient(circle at 50% 40%, #0d3442, #020b0e 75%)"><img class="shot" src="build/rec/${rec}/${String(n).padStart(5, "0")}.jpg" style="width:1920px;height:1080px;transform:translate(${cam.tx}px,${cam.ty}px) scale(${cam.s})"></div>`;
+  }
+
+  function scenarioTag(seg) {
+    return seg.scenario ? `<div style="position:absolute;left:60px;top:36px;padding:10px 20px;background:rgba(2,11,14,.82);border-left:6px solid var(--lime);font:700 28px 'DM Sans';color:#fff">${seg.scenario}</div>` : "";
+  }
+
+  function captionFrame(seg, t) {
+    const chunk = seg.captions.find((c) => t >= c.start && t < c.end);
+    const speaker = FILM.voices[seg.speaker];
+    return `<div class="cap">${chunk ? `<div class="txt">${chunk.text}</div>` : ""}</div><div class="tag">${FLAGS[speaker.flag]} ${speaker.name}</div>`;
+  }
+
+  function segmentFrame(seg, t) {
+    const v = seg.visual;
+    let html = v.rec ? recFrame(seg, t) : v.shot ? shotFrame(seg, t) : scenes[v.scene](t, seg, seg);
+    html += scenarioTag(seg);
+    if (seg.caption) html += captionFrame(seg, t);
+    return html;
+  }
+
+  window.loadFilm = async (film) => {
+    FILM = film;
+    await document.fonts.ready;
+  };
+  window.renderFrame = async (t) => {
+    const cf = FILM.crossfade;
+    const active = FILM.segments.filter((s) => t >= s.start - (s.fadeIn ? cf : 0) && t < s.start + s.duration + 0.001);
+    stage.innerHTML = active.map((s) => {
+      const local = t - s.start;
+      const op = s.fadeIn && local < 0 ? smooth((local + cf) / cf) : 1;
+      return `<div class="layer" style="opacity:${op}">${segmentFrame(s, Math.max(0, local))}</div>`;
+    }).join("");
+    await Promise.all([...stage.querySelectorAll("img")].map((img) => img.decode().catch(() => null)));
+  };
+</script>
+</body>
+</html>

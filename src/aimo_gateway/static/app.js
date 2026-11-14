@@ -1102,7 +1102,7 @@ function scopeListKnown(session) {
     }
     if (order) {
       parts.push(`<p><strong>Order placed</strong> · delivery ${esc(formatDay(order.requestedDeliveryDate || job.deliveryDate))}</p>`);
-      parts.push(`<dl class="facts"><dt>Order number</dt><dd class="mono" title="${esc(order.id || "")}">${esc(orderNumber(order.id))}</dd><dt>Placed by</dt><dd>${esc(roleLabel(order.committedBy))}</dd><dt>Placed</dt><dd>${esc(formatStamp(order.committedAt))}</dd></dl>`);
+      parts.push(`<dl class="facts"><dt>Order number</dt><dd class="mono" title="${esc(order.id || "")}">${esc(orderNumber(order.id))}</dd><dt>Requested by</dt><dd>Chef (buyer)</dd><dt>Sourced by</dt><dd>Buyer agent</dd>${(evaluation.reasons || []).some((reason) => reason.code === "APPROVAL_THRESHOLD_EXCEEDED") ? `<dt>Approved by</dt><dd>Kitchen manager</dd>` : `<dt>Approval</dt><dd>Not needed (within limit)</dd>`}<dt>Placed by</dt><dd>${esc(roleLabel(order.committedBy))}</dd><dt>Placed</dt><dd>${esc(formatStamp(order.committedAt))}</dd></dl>`);
       parts.push(`<button type="button" class="button button-quiet" data-action="export">${icon("download")} Download order record</button>`);
       return parts.join("");
     }
@@ -1211,7 +1211,7 @@ function scopeListKnown(session) {
     const listActive = state.jobs.some((job) => shouldPoll(job.state));
     const jobActive = current ? shouldPoll(current.state) : false;
     if (!listActive && !jobActive && state.jobs.length) return;
-    state.pollTimer = window.setTimeout(poll, current && (isWorking(current) || revealing(current)) ? 500 : 1500);
+    state.pollTimer = window.setTimeout(poll, current && (isWorking(current) || revealing(current)) ? 700 : 2500);
   }
 
   async function poll() {
@@ -1220,8 +1220,12 @@ function scopeListKnown(session) {
       return;
     }
     try {
-      await loadJobs();
-      if (state.route.view === "job" && state.route.id) await loadJob(state.route.id, true);
+      // Stay well under the gateway's per-user rate limit: while the agent works, poll only the open order.
+      const current = state.route.view === "job" ? state.job : null;
+      const working = Boolean(current && (isWorking(current) || revealing(current)));
+      state.pollCount = (state.pollCount || 0) + 1;
+      if (!current || !working && state.pollCount % 3 === 0) await loadJobs();
+      if (state.route.view === "job" && state.route.id) await loadJob(state.route.id, !working && state.pollCount % 3 === 0);
       state.notice = "";
     } catch (error) {
       if (error.status === 401) return unauthenticated();

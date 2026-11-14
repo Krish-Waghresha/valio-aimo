@@ -11,3 +11,6 @@ data/valio/
 data/gateway/
 playwright/.auth/
 valio-aimo-challenge.md
+video/build/
+video/recordings/*
+!video/recordings/README.md

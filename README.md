@@ -1,3 +1,12 @@
+# Historical research and production notes
+
+This branch preserves the Junction 2026 research, draft presentation/video notes
+and original production sources. It is an archive, not current release guidance.
+Use [main](https://github.com/Krish-Waghresha/valio-aimo/tree/main) for the verified
+project and demo instructions. No project license is granted.
+
+---
+
 # Valio Aimo Purchasing Workspace
 
 The working demo includes an Aimo-styled purchasing workspace, curated recipe
