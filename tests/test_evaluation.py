@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -85,7 +86,11 @@ def test_date_mismatch_and_clock_skew():
     def early(data):
         data["availability"]["products"][0]["scheduleLines"][0]["availableDate"] = "2026-11-15"
         return data
-    assert "DELIVERY_DATE_MISMATCH" in [item["code"] for item in evaluate(early)["reasons"]]
+    assert "DELIVERY_DATE_MISMATCH" not in [item["code"] for item in evaluate(early)["reasons"]]
+    def late(data):
+        data["availability"]["products"][0]["scheduleLines"][0]["availableDate"] = "2026-11-17"
+        return data
+    assert "DELIVERY_DATE_MISMATCH" in [item["code"] for item in evaluate(late)["reasons"]]
     def skew(data):
         data["availability"]["timeNow"] = "2026-11-14T07:00:00Z"
         return data
@@ -109,6 +114,7 @@ def test_upstream_errors_are_sanitized(status, code):
         assert "Authorization" not in request.headers and "Cookie" not in request.headers
         return httpx.Response(status, json={"detail": [{"input": "do-not-expose-this"}]})
     source = LiveSource("synthetic-test-key", httpx.MockTransport(handler))
+    source.rate_limit_seconds = 0
     try:
         with pytest.raises(Problem) as failure:
             source.fetch("123", "2026-11-16", ["demo-milk"])
@@ -211,3 +217,21 @@ def test_fractional_cent_rounding_and_comparison_prices():
     evaluator = Evaluator(Catalog.fixture(), FixtureSource(lambda: NOW, change), lambda: NOW)
     result, _ = evaluator.evaluate(REQUEST, basket, POLICY, 0)
     assert result["totals"] == {"netMinor": 5, "grossMinor": 6, "taxMinor": 1, "currency": "EUR", "basis": "goods_only"}
+
+def test_rate_limit_waits_for_the_block_then_retries(monkeypatch):
+    import aimo_gateway.upstream as upstream
+    waits, calls = [], []
+    monkeypatch.setattr(upstream.time, "sleep", waits.append)
+    def handler(request):
+        calls.append(request.url.path)
+        if len(calls) == 1:
+            return httpx.Response(429, headers={"Retry-After": "30"})
+        endpoint = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(200, json=json.loads(json.dumps(FixtureSource(lambda: NOW).fetch("123", "2026-11-16", ["demo-milk"])[endpoint], default=str)))
+    source = LiveSource("synthetic-test-key", httpx.MockTransport(handler))
+    try:
+        source.fetch("123", "2026-11-16", ["demo-milk"])
+    finally:
+        source.close()
+    assert waits == [30.0]
+    assert calls[:2] == ["/api/price", "/api/price"]

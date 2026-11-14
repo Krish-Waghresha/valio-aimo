@@ -210,7 +210,7 @@ Availability normalization distinguishes a valid refusal from a malformed body:
 | Product or schedule salesBlock true | Block SALES_BLOCK |
 | Missing/null cutoff or availableDate for a nonempty schedule | Block DELIVERY_UNCONFIRMED |
 | Unparseable non-null date/time | 502 UPSTREAM_INVALID |
-| Offered date differs from authorized date | Block DELIVERY_DATE_MISMATCH, whether earlier or later; require a new human request to change the date |
+| Offered (earliest) date is later than the authorized date | Block DELIVERY_DATE_MISMATCH; require a new human request to change the date. An earlier earliest-date is deliverable on the authorized date (organizers: availableDate is the earliest delivery; the mock API returns it regardless of requestedDate) |
 | Exact model Stock, finite nonnegative amount and matching technical unit | Require decimal amount >= integer order quantity; 0/shortfall blocks INSUFFICIENT_STOCK |
 | Exact model Terminal, including the 999999 sentinel | Block QUANTITY_UNCONFIRMED; omit availableQuantity |
 | Missing, null or other logisticModel; sentinel on a non-Terminal record | Block QUANTITY_UNCONFIRMED; normalized model Unknown where necessary |

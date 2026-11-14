@@ -467,7 +467,7 @@ class Planner:
                 "Guest count in the brief differs from the servings argument; servings is used.", "request"))
         recipe_id, recipe_questions = _recipe_choice(brief, constraints)
         questions.extend(recipe_questions)
-        if self.catalog.mode == "live" and not recipe_id and re.search(r"\bmilk\b", brief, re.I) and not re.search(r"\bpie(?:s)?\b", brief, re.I):
+        if self.catalog.mode == "live" and not recipe_id and re.search(r"\bmilk\b", brief, re.I) and not re.search(r"\bpie(?:s)?\b", re.sub(r"^Requested style:[^\n]*", "", brief), re.I):
             return self._live_milk(brief, servings, constraints, pantry, preference, warnings)
         direct_ids = _direct_ids(brief, self.catalog)
         if recipe_id and direct_ids:

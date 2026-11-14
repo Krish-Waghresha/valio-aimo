@@ -174,6 +174,14 @@ def create_app(gateway):
         response.delete_cookie("gateway_session")
         return response
 
+    @app.post("/workspace/interpret", include_in_schema=False)
+    async def interpret_request(request: Request):
+        credential = await workspace_credential(request, True)
+        data = await body(request)
+        if not isinstance(data, dict) or set(data) != {"text"} or not isinstance(data["text"], str) or not 0 < len(data["text"]) <= 2000:
+            raise Problem(422, "INVALID_INPUT", "Send one request text of at most 2000 characters")
+        return await run_in_threadpool(workspace.interpret, credential, data["text"])
+
     @app.get("/workspace/jobs", include_in_schema=False)
     async def list_jobs(request: Request):
         return await run_in_threadpool(workspace.list_jobs, await workspace_credential(request))
@@ -205,6 +213,10 @@ def create_app(gateway):
     async def job_action(job_id: str, action: str, request: Request):
         credential = await workspace_credential(request, True)
         data = await body(request)
+        if action == "resolve":
+            if not isinstance(data, dict) or set(data) != {"exceptionId", "optionId"} or not all(isinstance(value, str) and len(value) <= 64 for value in data.values()):
+                raise Problem(422, "INVALID_INPUT")
+            return await run_in_threadpool(workspace.resolve, credential, job_id, data)
         if action == "decision":
             gateway.wire.input("decideEvaluation", data)
             return await run_in_threadpool(workspace.decide, credential, job_id, data)

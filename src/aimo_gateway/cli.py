@@ -82,6 +82,12 @@ def admin(args):
                     policy[field] = argument
             if policy["autonomousLimitMinor"] > policy["orderLimitMinor"]:
                 raise ValueError("Autonomous ceiling cannot exceed the hard order ceiling")
+            if getattr(args, "manager_approval_limit", None) is not None:
+                if not 0 <= args.manager_approval_limit <= 1_000_000_000_000:
+                    raise ValueError("Approval limit must be nonnegative EUR cents within supported range")
+                manager = store.get(connection, "principal", "manager")
+                manager["approvalLimitMinor"] = args.manager_approval_limit
+                store.put(connection, "principal", manager, manager["customerId"])
             policy["version"] = identity()
             store.put(connection, "policy", policy, policy["id"])
     print(f"Owner operation complete: {args.command}")
@@ -167,6 +173,7 @@ def main():
     parser.add_argument("--autonomous-limit", type=int)
     parser.add_argument("--order-limit", type=int)
     parser.add_argument("--daily-limit", type=int)
+    parser.add_argument("--manager-approval-limit", type=int, help="Largest basket (EUR cents) the manager may approve")
     parser.add_argument("--product")
     parser.add_argument("--quantity", type=int, default=10)
     args = parser.parse_args()

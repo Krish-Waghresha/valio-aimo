@@ -86,7 +86,8 @@ def availability(raw, line, delivery_date, clock, upstream_now):
         result["availableDate"] = calendar_date(schedule["availableDate"])
         closing = timestamp(raw["closingTime"])
         result["closingTime"] = stamp(closing)
-        if result["availableDate"] != delivery_date:
+        # availableDate is the EARLIEST delivery the supplier offers; any later requested day is deliverable.
+        if result["availableDate"] > delivery_date:
             codes.append("DELIVERY_DATE_MISMATCH")
         if closing <= max(clock, upstream_now):
             codes.append("CUTOFF_PASSED")

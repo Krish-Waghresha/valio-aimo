@@ -316,3 +316,11 @@ def test_gateway_accepts_constrained_demo_baskets():
     assert evaluation["outcome"] == "allowed"
     vegan = plan("Vegan vegetable pies", 12, dietaryRequirements=["vegan"])
     assert evaluate(vegan["lines"], DemoSource(lambda: NOW), ["vegan"])["outcome"] == "allowed"
+
+
+def test_live_milk_request_ignores_not_a_pie_style_prefix():
+    planner = Planner(Catalog([], "test", "live"))
+    calls = []
+    planner._live_milk = lambda *args: calls.append(args) or {"title": "Milk replenishment"}
+    planner.plan("Requested style: not-a-pie.\n\n12 litres lactose-free milk", 1, constraints())
+    assert calls, "The UI style prefix must not make a milk request look like a pie request"
