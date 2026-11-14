@@ -11,7 +11,7 @@ A purchasing workspace and owner-controlled gateway for Valio Aimo's
 - Enforce spending limits, separate human approval, fresh quotes and duplicate-safe commitments.
 - Explain purchasing decisions through a persistent, exportable audit trail.
 
-[Watch demo](https://youtu.be/BWGWDc29ZfQ) | [API & guardrails](docs/gateway-contract.md) | [Run & verify](docs/running.md) | [Slides (PDF)](docs/presentation/slides.pdf) | [Video source](video/)
+[Watch demo](https://youtu.be/BWGWDc29ZfQ) | [API & guardrails](docs/gateway-contract.md) | [Run & verify](docs/running.md) | [Finals pitch (PDF)](docs/presentation/slides.pdf) | [Video source](video/)
 
 ## Try it locally
 
