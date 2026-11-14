@@ -75,6 +75,14 @@ class LiveSource:
     def close(self):
         self.client.close()
 
+    rate_limit_seconds = 31
+
+    def rate_limit_wait(self, response):
+        try:
+            return min(max(float(response.headers.get("Retry-After", self.rate_limit_seconds)), 0), 60)
+        except ValueError:
+            return self.rate_limit_seconds
+
     def fetch(self, customer, delivery_date, products):
         payload = {"customer": customer, "requestedDate": delivery_date, "products": products}
         result = {}
@@ -100,7 +108,11 @@ class LiveSource:
                         raise Problem(502, "UPSTREAM_INVALID") from None
                     break
                 logging.getLogger("aimo_gateway.upstream").warning("Lookup HTTP failure endpoint=%s status=%s", endpoint, response.status_code)
-                if attempt == 0 and (response.status_code == 429 or response.status_code >= 500):
+                if attempt == 0 and response.status_code == 429:
+                    # Organizers: a 429 blocks the key for 30 seconds; honour it once, then report honestly.
+                    time.sleep(self.rate_limit_wait(response))
+                    continue
+                if attempt == 0 and response.status_code >= 500:
                     time.sleep(0.1)
                     continue
                 raise Problem(503, "UPSTREAM_UNAVAILABLE")

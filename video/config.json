@@ -1,0 +1,252 @@
+{
+  "title": "Trusted Trade Agents — The Delusionals",
+  "maxSeconds": 120.0,
+  "fps": 30,
+  "size": [
+    1920,
+    1080
+  ],
+  "model": "eleven_multilingual_v2",
+  "gap": 0.15,
+  "crossfade": 0.5,
+  "voices": {
+    "krish": {
+      "name": "Krish",
+      "flag": "in",
+      "voiceId": "82hBsVN6GRUwWKT8d1Kz",
+      "note": "ElevenLabs library voice 'Aahir – Expressive and Lively', young, high-energy Indian-accented English",
+      "settings": {
+        "speed": 1.12,
+        "style": 0.55,
+        "stability": 0.35
+      }
+    },
+    "jakub": {
+      "name": "Jakub",
+      "flag": "pl",
+      "voiceId": "8jMNCczgLGJQ3uVTkRhG",
+      "note": "ElevenLabs library voice 'Szymon', young Polish-accented English",
+      "settings": {
+        "speed": 1.1
+      }
+    }
+  },
+  "voiceSettings": {
+    "stability": 0.4,
+    "similarity_boost": 0.8,
+    "style": 0.45,
+    "use_speaker_boost": true,
+    "speed": 1.08
+  },
+  "loudnessLufs": -16,
+  "music": {
+    "prompt": "Energetic cinematic tech product launch score, 2 minutes. Opens with a punchy low pulse and ticking clock, builds quickly into confident driving synth arpeggios with crisp modern drums and claps, playful and optimistic, a short breakdown in the middle, big uplifting final chorus, clean ending hit. No vocals.",
+    "seconds": 120,
+    "volumeDb": -20
+  },
+  "segments": [
+    {
+      "id": "s01",
+      "speaker": "krish",
+      "text": "Quick question. Who's going to place your next wholesale order?",
+      "visual": {
+        "scene": "hook"
+      }
+    },
+    {
+      "id": "s02",
+      "speaker": "jakub",
+      "text": "For decades, it was a person. A phone call. A catalog. A webshop.",
+      "visual": {
+        "scene": "history"
+      }
+    },
+    {
+      "id": "s03",
+      "speaker": "krish",
+      "text": "Next? An AI agent. It never sleeps, it never forgets, and it orders in seconds.",
+      "visual": {
+        "scene": "agent"
+      }
+    },
+    {
+      "id": "s04",
+      "speaker": "jakub",
+      "text": "The center of buying is moving. So here's our answer: open to agents. On Valio Aimo's terms.",
+      "visual": {
+        "scene": "hero"
+      },
+      "hold": 0.3
+    },
+    {
+      "id": "s05",
+      "speaker": "krish",
+      "text": "We're The Delusionals, and this is Trusted Trade Agents.",
+      "visual": {
+        "scene": "title"
+      },
+      "hold": 0.4
+    },
+    {
+      "id": "s06",
+      "speaker": "jakub",
+      "text": "We built two things that work as one flow. First, the Trusted Gateway: an open API. Compatible AI agents with scoped credentials can look up products, prices and stock. The gateway checks limits, gets human approval when needed, records a local mock order, and logs every step.",
+      "visual": {
+        "scene": "architecture",
+        "part": 1
+      }
+    },
+    {
+      "id": "s07",
+      "speaker": "krish",
+      "text": "Second, the agent workspace. The chef says what they need in plain words. The agent sources it, handles the exceptions, and asks a person only when it matters.",
+      "visual": {
+        "scene": "architecture",
+        "part": 2
+      },
+      "hold": 0.3
+    },
+    {
+      "id": "s08",
+      "speaker": "jakub",
+      "text": "Let's see it in action, with three scenarios.",
+      "visual": {
+        "scene": "scenarios"
+      },
+      "hold": 0.3
+    },
+    {
+      "id": "s09",
+      "speaker": "jakub",
+      "text": "Scenario one, a big order. Valio Aimo's own example: a thousand litres of lactose-free milk, by Monday.",
+      "visual": {
+        "rec": "A"
+      },
+      "scenario": "Scenario 1 · A big order",
+      "caption": true
+    },
+    {
+      "id": "s10",
+      "speaker": "jakub",
+      "text": "The agent turns it into a structured order, and clearly marks anything it assumed.",
+      "visual": {
+        "rec": "A"
+      },
+      "scenario": "Scenario 1 · A big order",
+      "caption": true
+    },
+    {
+      "id": "s11",
+      "speaker": "krish",
+      "text": "Then it checks live price and stock for the eleven best matches, in one call.",
+      "visual": {
+        "rec": "A"
+      },
+      "scenario": "Scenario 1 · A big order",
+      "caption": true
+    },
+    {
+      "id": "s12",
+      "speaker": "krish",
+      "text": "Here's the twist: the usual Arla milk only has three hundred and eighty-four litres. So the agent recommends Valio Aimo's official substitute. Same spec, fully in stock, six hundred euros cheaper.",
+      "visual": {
+        "rec": "A",
+        "zoom": [
+          1.2,
+          -1.6
+        ]
+      },
+      "scenario": "Scenario 1 · A big order",
+      "caption": true
+    },
+    {
+      "id": "s13",
+      "speaker": "krish",
+      "text": "That's above the agent's limit, so it goes to the kitchen manager.",
+      "visual": {
+        "rec": "A"
+      },
+      "scenario": "Scenario 1 · A big order",
+      "caption": true,
+      "minSeconds": 4.3
+    },
+    {
+      "id": "s14",
+      "speaker": "jakub",
+      "text": "The manager sees exactly why, and approves. Price and stock are checked again, and a local mock order is recorded.",
+      "visual": {
+        "rec": "B",
+        "zoom": [
+          0.8,
+          -3.0
+        ]
+      },
+      "scenario": "Scenario 1 · Kitchen manager's screen",
+      "caption": true
+    },
+    {
+      "id": "s15",
+      "speaker": "jakub",
+      "text": "Scenario two, a small everyday order: twenty kilos of butter for Friday.",
+      "visual": {
+        "rec": "C"
+      },
+      "scenario": "Scenario 2 · A small order",
+      "caption": true
+    },
+    {
+      "id": "s16",
+      "speaker": "krish",
+      "text": "Forty-two euros, well under the demo limit. So the agent records a mock order on its own, and it's still fully on the record.",
+      "visual": {
+        "rec": "C"
+      },
+      "scenario": "Scenario 2 · A small order",
+      "caption": true
+    },
+    {
+      "id": "s17",
+      "speaker": "krish",
+      "text": "Scenario three: an agent tries to skip the manager, and then to approve itself. The gateway refuses both.",
+      "visual": {
+        "scene": "terminal"
+      },
+      "scenario": "Scenario 3 · An agent tries to cheat",
+      "caption": true,
+      "hold": 0.4
+    },
+    {
+      "id": "s18",
+      "speaker": "jakub",
+      "text": "Agents handle the small stuff. Humans sign what matters. And the rules never bend.",
+      "visual": {
+        "scene": "rules"
+      }
+    },
+    {
+      "id": "s19",
+      "speaker": "krish",
+      "text": "The webshop isn't going anywhere. But the center of gravity is moving.",
+      "visual": {
+        "scene": "moving"
+      }
+    },
+    {
+      "id": "s20",
+      "speaker": "jakub",
+      "text": "Open to agents.",
+      "visual": {
+        "scene": "end"
+      }
+    },
+    {
+      "id": "s21",
+      "speaker": "krish",
+      "text": "On Valio Aimo's terms.",
+      "visual": {
+        "scene": "end"
+      },
+      "hold": 1.6
+    }
+  ]
+}

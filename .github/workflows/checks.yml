@@ -1,0 +1,62 @@
+name: Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: "0.8.13"
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --frozen --extra dev
+      - name: Lint
+        run: uv run ruff check src tests scripts video
+      - name: Check API contracts
+        run: uv run python scripts/check_gateway_contract.py
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@2.78.0 lint docs/gateway.openapi.json --config docs/redocly.yaml
+      - name: Run automated tests
+        run: uv run pytest -q
+      - name: Install browser
+        run: uv run playwright install --with-deps chromium
+      - name: Run offline browser journeys
+        env:
+          AIMO_E2E_URL: http://127.0.0.1:8002
+          AIMO_E2E_CREDENTIALS: data/gateway/workspace-fixture/credentials.json
+        run: |
+          uv run aimo-gateway init --mode fixture --database data/gateway/workspace-fixture/gateway.sqlite --origin "$AIMO_E2E_URL"
+          uv run aimo-gateway policy --mode fixture --database data/gateway/workspace-fixture/gateway.sqlite --autonomous-limit 5000
+          mkdir -p test-results
+          uv run aimo-gateway serve --workspace --mode fixture --database data/gateway/workspace-fixture/gateway.sqlite --port 8002 --origin "$AIMO_E2E_URL" > test-results/server.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          ready=false
+          for attempt in {1..30}; do
+            if curl --fail --silent "$AIMO_E2E_URL/openapi.json" > /dev/null; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            cat test-results/server.log
+            exit 1
+          fi
+          uv run pytest tests/test_browser.py -q

@@ -59,6 +59,7 @@
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
     leaf: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
     "log-out": '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+    mic: '<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>',
     minus: '<path d="M5 12h14"/>',
     pencil: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
     plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
@@ -137,19 +138,19 @@
 
   function formatMinor(minor) {
     if (!Number.isInteger(minor)) return "Not available";
-    return new Intl.NumberFormat("fi-FI", { style: "currency", currency: "EUR" }).format(minor / 100);
+    return new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" }).format(minor / 100);
   }
 
   function formatDate(iso) {
     const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
     if (!match) return iso ? String(iso) : "Not available";
-    return new Intl.DateTimeFormat("fi-FI", { dateStyle: "medium", timeZone: "Europe/Helsinki" }).format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))));
+    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))));
   }
 
   function formatStamp(iso) {
     const time = Date.parse(iso || "");
     if (Number.isNaN(time)) return iso ? String(iso) : "Not available";
-    return new Intl.DateTimeFormat("fi-FI", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Helsinki" }).format(new Date(time));
+    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Helsinki" }).format(new Date(time));
   }
 
   function parseAmount(value) {
@@ -230,20 +231,90 @@ function scopeListKnown(session) {
   }
 
   function agentLabel(mode) {
-    if (mode === "deterministic") return "Deterministic planner";
-    if (mode === "grok") return "Grok planner";
+    if (mode === "deterministic") return "Reviewed-recipe planner";
+    if (mode === "grok") return "AI planner";
     return mode ? `Planner mode: ${mode}` : "Planner mode not reported";
+  }
+
+  function roleLabel(principal) {
+    return { chef: "Chef (buyer)", manager: "Kitchen manager", "buyer-agent": "Buyer agent" }[principal] || principal || "Unknown";
+  }
+
+  function jobSubtitle(job) {
+    const where = job.mode === "live" ? "live Aimo prices and stock" : "demo prices and stock";
+    if (job.agentMode === "grok") return `AI interpreted the request; quantities, allergens and limits were checked by code against ${where}.`;
+    return `Reviewed recipe, scaled and rounded to pack sizes, then checked against ${where}.`;
+  }
+
+  function stockText(quantity) {
+    const amount = Number(quantity);
+    if (!Number.isFinite(amount)) return "Available";
+    if (amount >= 1000000) return "In stock";
+    return `${amount} in stock`;
+  }
+
+  function formatCutoff(iso) {
+    if (!iso) return "";
+    const value = new Date(iso);
+    if (Number.isNaN(value.getTime())) return "";
+    return value.toLocaleString("en-GB", { timeZone: "Europe/Helsinki", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function orderNumber(id) {
+    return id ? "AIMO-" + String(id).replace(/-/g, "").slice(0, 8).toUpperCase() : "";
+  }
+
+  const STEP_MS = 700;
+  function pace(ms) {
+    const reduced = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return new Promise((resolve) => setTimeout(resolve, reduced ? 0 : ms));
+  }
+
+  function progressList(steps, working) {
+    return `<ol class="progress">${steps.map((step) => `<li class="${step.done === false ? "running" : "done"}"><span class="pmark" aria-hidden="true">${step.done === false ? "" : "✓"}</span><span><strong>${esc(step.label)}</strong>${step.detail ? `<span class="pdetail"> · ${esc(step.detail)}</span>` : ""}</span></li>`).join("")}${working ? `<li class="running"><span class="pmark" aria-hidden="true"></span><span>Working…</span></li>` : ""}</ol>`;
+  }
+
+  function isWorking(job) {
+    if (job.state === "needs_decision") return (job.exceptions || []).length > 0 && job.exceptions.every((item) => item.choice);
+    return ["planning", "checking"].includes(job.state);
+  }
+
+  function revealing(job) {
+    const reveal = state.reveal;
+    return Boolean(reveal && reveal.jobId === job.id && !reveal.done);
+  }
+
+  function advanceReveal() {
+    const reveal = state.reveal;
+    const job = state.job;
+    if (!reveal || reveal.done || reveal.timer || !job || job.id !== reveal.jobId) return;
+    const steps = job.steps || [];
+    if (reveal.shown < steps.length) {
+      reveal.timer = setTimeout(() => { reveal.timer = 0; reveal.shown += 1; render(); advanceReveal(); }, STEP_MS);
+    } else if (!isWorking(job)) {
+      reveal.timer = setTimeout(() => { reveal.timer = 0; reveal.done = true; render(); }, 350);
+    }
+  }
+
+  function startReveal(job, fromCurrent) {
+    if (state.reveal && state.reveal.timer) clearTimeout(state.reveal.timer);
+    state.reveal = { jobId: job.id, shown: fromCurrent ? (job.steps || []).length : 1, done: false, timer: 0 };
+  }
+
+  function placeholderIcon() {
+    return `<div class="placeholder" aria-hidden="true">${icon("utensils")}</div>`;
   }
 
   function stateLabel(state) {
     return {
       planning: "Planning",
       checking: "Checking availability",
-      needs_clarification: "Needs clarification",
+      needs_clarification: "Needs more detail",
+      needs_decision: "Needs your decision",
       blocked: "Blocked",
-      awaiting_approval: "Awaiting approval",
-      ready: "Ready for mock order",
-      ordered_mock: "Mock order placed",
+      awaiting_approval: "Waiting for approval",
+      ready: "Ready to order",
+      ordered_mock: "Order placed",
       rejected: "Rejected",
       cancelled: "Cancelled",
       failed: "Failed"
@@ -252,13 +323,13 @@ function scopeListKnown(session) {
 
   function statusClass(state) {
     if (["blocked", "failed", "rejected"].includes(state)) return "status status-bad";
-    if (["awaiting_approval", "needs_clarification", "cancelled"].includes(state)) return "status status-neutral";
+    if (["awaiting_approval", "needs_clarification", "needs_decision", "cancelled"].includes(state)) return "status status-neutral";
     return "status";
   }
 
   function modeLabel(mode) {
-    if (mode === "fixture") return "Fixture data. Not a live organizer result.";
-    if (mode === "live") return "Live catalog checks. Orders remain local mocks.";
+    if (mode === "fixture") return "Demo data";
+    if (mode === "live") return "Live Aimo prices and stock";
     return "Evidence mode not reported.";
   }
 
@@ -318,6 +389,7 @@ function scopeListKnown(session) {
       preference: draft.preference,
       autoCommit: Boolean(draft.autoCommit)
     };
+    if (Array.isArray(draft.items) && draft.items.length) body.items = draft.items.map((item) => ({ query: item.query, quantity: String(item.quantity), unit: item.unit }));
     if (session && session.mode === "fixture") body.scenario = draft.scenario || "normal";
     return { ok: true, body, errors: {} };
   }
@@ -326,7 +398,7 @@ function scopeListKnown(session) {
     return {
       brief: "", style: "", servings: "", deliveryDate: "", budget: "", preference: "balanced",
       dietaryConfirmed: false, dietaryRequirements: [], excludedAllergens: [], pantry: [],
-      scenario: "normal", autoCommit: false, revisingFrom: null
+      scenario: "normal", autoCommit: true, revisingFrom: null
     };
   }
 
@@ -335,7 +407,7 @@ function scopeListKnown(session) {
     session: null,
     jobs: [],
     job: null,
-    events: [],
+    events: null,
     route: { view: "requests", id: null, tab: "plan" },
     draft: emptyDraft(),
     filter: "",
@@ -348,7 +420,15 @@ function scopeListKnown(session) {
     busy: "",
     pollTimer: 0,
     jobSeq: 0,
-    lastLive: ""
+    lastLive: "",
+    ask: "",
+    understood: null,
+    showForm: false,
+    listening: false,
+    recognizer: null,
+    reveal: null,
+    thinking: null,
+    placing: null
   };
 
   function storageGet(key) {
@@ -373,6 +453,7 @@ function scopeListKnown(session) {
     state.session = null;
     state.jobs = [];
     state.job = null;
+    state.events = null;
     storageSet(CSRF_KEY, "");
   }
 
@@ -402,9 +483,17 @@ function scopeListKnown(session) {
   }
 
   function problemText(payload, status) {
+    const FRIENDLY = {
+      FORBIDDEN: "You don't have permission for this. For example, the total may be above your approval limit.",
+      EVALUATION_EXPIRED: "Prices and stock were checked too long ago. Press “Recheck” and try again.",
+      EVALUATION_REQUIRED: "Prices or stock changed since the check. Recheck before ordering.",
+      RATE_LIMITED: "Too many requests right now. Wait 30 seconds and try again.",
+      UPSTREAM_UNAVAILABLE: "Valio Aimo price/stock service is not answering. Try again in a moment."
+    };
+    if (payload && typeof payload === "object" && FRIENDLY[payload.code]) return FRIENDLY[payload.code];
     if (payload && typeof payload === "object") {
       const detail = payload.detail || payload.title || payload.code || "Request failed";
-      return payload.traceId ? `${detail} Trace ${payload.traceId}.` : String(detail);
+      return String(detail);
     }
     return status ? `Request failed with status ${status}.` : "Request failed.";
   }
@@ -412,7 +501,7 @@ function scopeListKnown(session) {
   function parseRoute() {
     const raw = (location.hash || "#requests").replace(/^#\/?/, "");
     const [head, id, tab] = raw.split("/");
-    if (head === "job" && id) return { view: "job", id, tab: ["plan", "basket", "comparison", "activity"].includes(tab) ? tab : "plan" };
+    if (head === "job" && id) return { view: "job", id, tab: ["plan", "basket", "comparison", "activity"].includes(tab) ? tab : "basket" };
     if (head === "approvals") return { view: "approvals", id: id || null, tab: "basket" };
     if (head === "orders") return { view: "orders", id: id || null, tab: "basket" };
     return { view: "requests", id: null, tab: "plan" };
@@ -506,7 +595,10 @@ function scopeListKnown(session) {
     else window.scrollTo(0, y);
     restoreFocus(focus);
     const job = state.job;
-    if (job && state.route.view === "job") announce(`${stateLabel(job.state)}. ${agentLabel(job.agentMode)}.`);
+    if (job && state.route.view === "job") {
+      announce(`${stateLabel(job.state)}.`);
+      advanceReveal();
+    }
   }
 
   function shell(main) {
@@ -521,22 +613,18 @@ function scopeListKnown(session) {
     const link = (view, label, count) => `<a href="#${view}"${current === view ? ' aria-current="page"' : ""}>${esc(label)}${count == null ? "" : ` (${count})`}</a>`;
     const nav = session ? `<nav class="nav" aria-label="Workspace">${link("requests", "Requests")}${link("approvals", "Approvals", awaiting)}${link("orders", "Orders", ordered)}</nav>` : "";
     const tools = session ? `<div class="actions top-actions">
-      <button type="button" class="button button-on-teal" data-action="reload">${icon("refresh-cw")} Reload</button>
       <button type="button" class="button button-on-teal" data-action="logout">${icon("log-out")} Log out</button>
     </div>` : "";
     const account = session ? `<div class="account"><div class="account-inner"><div class="account-meta">
-      <span class="chip">Demo Catering Kitchen</span>
-      <span>Fictional prototype account</span>
-      <span>Principal <strong>${esc(session.principalId || "not reported")}</strong></span>
-      <span>${esc(modeLabel(session.mode))}</span>
-      <span>${esc(agentLabel(session.agentMode))}</span>
+      <span class="chip">Hotel Aurora Helsinki</span>
+      <span>Signed in as <strong>${esc(roleLabel(session.principalId))}</strong></span>
     </div>${nav}</div></div>` : "";
-    return `<header><div class="topbar"><div class="topbar-inner"><div class="brand"><p class="wordmark">Aimo</p><p class="brand-sub">Purchasing workspace</p></div>
-      <div class="top-tools"><p class="prototype">Junction prototype · synthetic data · local mock orders</p>${tools}</div></div></div>${account}</header>`;
+    return `<header><div class="topbar"><div class="topbar-inner"><div class="brand"><p class="wordmark">Aimo</p><p class="brand-sub">Purchasing agent</p></div>
+      <div class="top-tools">${tools}</div></div></div>${account}</header>`;
   }
 
   function footer() {
-    return `<footer><div class="wrap credit"><p>Not a production Valio Aimo service. Fonts: Barlow Condensed and DM Sans, SIL Open Font License. Icons: <a href="icons/LICENSE-lucide.txt">Lucide, ISC</a>. Illustrative photos, when a known demo recipe has no image: <a href="https://commons.wikimedia.org/wiki/File:Mixed_vegetables_quiche.jpg">mixed-vegetable quiche by E4024, CC BY-SA 4.0</a>; <a href="https://commons.wikimedia.org/wiki/File:Apple_pie_24.jpg">apple pie by Shisma, CC BY 4.0</a>. Product rows use only an image supplied for that product.</p></div></footer>`;
+    return `<footer><div class="wrap credit"><p>Valio Aimo · <a href="icons/LICENSE-lucide.txt">Licences</a></p></div></footer>`;
   }
 
   function banner() {
@@ -563,11 +651,94 @@ function scopeListKnown(session) {
     return requestView();
   }
 
+  const EXAMPLES = [
+    "1,000 litres lactose-free milk by Monday",
+    "Savory pies for 100 wedding guests on Saturday, under 400 euros",
+    "12 litres lactose-free milk for tomorrow"
+  ];
+
   function requestView() {
     const session = state.session;
     const canCreate = availableActions(null, session, Date.now()).create;
-    const form = canCreate ? requestForm() : `<p>This principal cannot start a request. Approval actions, if granted, stay on the Approvals view.</p>`;
-    return `<section class="stack"><div class="stack-tight"><h1>Requests</h1></div>${form}<hr class="rule">${jobList("Recent requests", state.jobs, "No purchasing requests yet.")}</section>`;
+    if (!canCreate) {
+      return `<section class="stack"><h1>Orders waiting for you</h1>${jobList("Needs your approval", state.jobs.filter((job) => job.state === "awaiting_approval"), "Nothing waiting. You will see orders here when they exceed the buyer's limit.")}<hr class="rule">${jobList("Recent orders", state.jobs.filter((job) => job.state !== "awaiting_approval"), "No orders yet.")}</section>`;
+    }
+    const body = state.thinking ? `<section class="working-card" aria-live="polite">${progressList(state.thinking, false)}</section>` : state.showForm ? `<div class="stack"><div class="actions-inline"><h2>Order details</h2>${state.understood ? `<button type="button" class="text-link" data-action="hide-form">Back to summary</button>` : ""}</div>${requestForm()}</div>`
+      : state.understood ? understoodCard() : examplesBlock();
+    return `<section class="stack ask-page">
+      <div class="stack-tight"><h1>What do you need?</h1><p class="lead">Type or say it in your own words. The agent finds the products, checks price and delivery, and only asks you when something needs a decision.</p></div>
+      ${askBar()}
+      ${body}
+      <hr class="rule">${jobList("Recent orders", state.jobs, "No orders yet.")}
+    </section>`;
+  }
+
+  function askBar() {
+    const listening = state.listening;
+    return `<form id="ask-form" class="ask-bar${listening ? " is-listening" : ""}" novalidate>
+      <label class="visually-hidden" for="ask">Your request</label>
+      <textarea id="ask" name="ask" rows="2" maxlength="2000" placeholder="e.g. 1,000 litres lactose-free milk by Monday">${esc(state.ask)}</textarea>
+      <div class="ask-actions">
+        <button type="button" class="mic${listening ? " on" : ""}" data-action="mic" aria-label="${listening ? "Stop listening" : "Speak your request"}" title="${listening ? "Stop listening" : "Speak your request"}">${icon("mic")}<span>${listening ? "Listening…" : "Speak"}</span></button>
+        <button type="submit" class="button button-primary" ${state.busy === "interpret" ? "disabled" : ""}>${state.busy === "interpret" ? "Reading…" : "Continue"}</button>
+      </div>
+    </form>
+    ${state.showForm ? "" : `<button type="button" class="text-link" data-action="show-form">Use the order form instead</button>`}`;
+  }
+
+  function examplesBlock() {
+    return `<div class="examples"><p class="label">Try</p>${EXAMPLES.map((text) => `<button type="button" class="example" data-action="example" data-text="${esc(text)}">${esc(text)}</button>`).join("")}</div>`;
+  }
+
+  const FIELD_LABELS = { items: "Products", style: "Pie style", servings: "Guests", deliveryDate: "Delivery", budget: "Budget", dietaryRequirements: "Diet", excludedAllergens: "Allergies", preference: "Priority" };
+
+  function chipValue(name, field) {
+    const value = field.value;
+    if (name === "items") return (value || []).map((item) => `${formatQuantity(item.quantity)} ${item.unit === "l" ? "L" : item.unit} ${item.query}`).join(", ");
+    if (name === "deliveryDate") return value ? formatDay(value) : "";
+    if (name === "budget") return value ? `up to ${formatMinor(eurosToMinor(value))}` : "";
+    if (name === "dietaryRequirements") return (value || []).length ? value.map((key) => (DIET.find(([k]) => k === key) || [key, key])[1].replace(" (not milk-free)", "")).join(", ") : "None";
+    if (name === "excludedAllergens") return (value || []).length ? "No " + value.map((key) => (ALLERGENS.find(([k]) => k === key) || [key, key])[1].toLowerCase()).join(", no ") : "None";
+    if (name === "preference") return (PREFERENCES.find(([k]) => k === value) || [value, value])[1];
+    if (name === "style") return styleLabel(value);
+    return value == null ? "" : String(value);
+  }
+
+  function understoodCard() {
+    const result = state.understood;
+    const fields = result.fields || {};
+    const order = result.kind === "recipe" ? ["style", "servings", "deliveryDate", "budget", "excludedAllergens", "dietaryRequirements", "preference"]
+      : ["items", "deliveryDate", "budget", "dietaryRequirements", "excludedAllergens", "preference"];
+    const chips = order.filter((name) => fields[name] && fields[name].source !== "missing").map((name) => {
+      const field = fields[name];
+      const check = field.source === "inferred" || field.source === "default";
+      const note = field.note ? ` · ${field.note}` : field.source === "inferred" && field.evidence ? ` · from “${field.evidence}”` : "";
+      return `<button type="button" class="uchip${check ? " uchip-check" : ""}" data-action="show-form" title="${check ? "Assumed. Tap to change." : "From your request. Tap to change."}"><span class="uchip-label">${esc(FIELD_LABELS[name])}</span><span class="uchip-value">${esc(chipValue(name, field))}</span>${check ? `<span class="uchip-note">${esc(field.source === "default" ? "assumed" : "check")}${esc(note)}</span>` : ""}</button>`;
+    }).join("");
+    const questions = (result.questions || []).map((item) => `<div class="question"><p><strong>${esc(item.question)}</strong></p><div class="actions-inline">${(item.options || []).length
+      ? item.options.map((option) => `<button type="button" class="button button-secondary" data-action="answer" data-field="${esc(item.field)}" data-value="${esc(option)}">${esc(styleLabel(option) || option)}</button>`).join("")
+      : item.field === "servings" ? `<input id="answer-servings" inputmode="numeric" aria-label="Number of guests" placeholder="100"><button type="button" class="button button-secondary" data-action="answer" data-field="servings">Set</button>` : ""}</div></div>`).join("");
+    const limit = state.session && state.session.policy && state.session.policy.autonomousLimitMinor;
+    const ready = !(result.questions || []).length;
+    return `<section class="understood" aria-label="What the agent understood">
+      <div class="actions-inline"><h2>Here's what I understood</h2><button type="button" class="text-link" data-action="show-form">${icon("pencil")} Edit details</button></div>
+      <div class="uchips">${chips}</div>
+      ${questions}
+      ${ready ? `<div class="check confirm-diet"><input id="dietaryConfirmed" type="checkbox" ${state.draft.dietaryConfirmed ? "checked" : ""} data-bind="dietaryConfirmed"><label for="dietaryConfirmed">Diet and allergies above are correct</label></div>
+      <div class="check"><input id="autoCommit" type="checkbox" ${state.draft.autoCommit ? "checked" : ""} data-bind="autoCommit"><label for="autoCommit">Order automatically if the total stays under ${esc(formatMinor(limit))}</label></div>
+      <button type="button" class="button button-primary button-big" data-action="find" ${state.busy === "submit" || !state.draft.dietaryConfirmed ? "disabled" : ""}>${state.busy === "submit" ? "Starting…" : "Find products"}</button>${state.draft.dietaryConfirmed ? "" : `<p class="hint">Tick the diet confirmation to continue.</p>`}` : ""}
+    </section>`;
+  }
+
+  function formatQuantity(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toLocaleString("en-GB", { maximumFractionDigits: 2 }) : String(value);
+  }
+
+  function formatDay(iso) {
+    if (!iso) return "";
+    const date = new Date(`${iso}T12:00:00`);
+    return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
   }
 
   function requestForm() {
@@ -578,7 +749,7 @@ function scopeListKnown(session) {
     const fixture = session && session.mode === "fixture";
     const policy = session && session.policy || {};
     const limits = Number.isInteger(policy.autonomousLimitMinor) || Number.isInteger(policy.orderLimitMinor)
-      ? `Synthetic demo policy: autonomous ${formatMinor(policy.autonomousLimitMinor)}, order ceiling ${formatMinor(policy.orderLimitMinor)}. Not a Valio Aimo customer contract.`
+      ? `You can order up to ${formatMinor(policy.autonomousLimitMinor)} without approval. Larger baskets go to a manager (max ${formatMinor(policy.orderLimitMinor)} per order).`
       : "Delegated limits were not returned with the session.";
     return `<form id="request-form" class="stack" novalidate>
       ${draft.revisingFrom ? `<div class="notice"><p>This starts a new request. Approval of ${esc(draft.revisingFrom)} will not apply.</p></div>` : ""}
@@ -590,20 +761,22 @@ function scopeListKnown(session) {
         <div class="field"><label for="deliveryDate">Delivery date</label><input id="deliveryDate" name="deliveryDate" type="date" ${today ? `min="${esc(today)}"` : ""} value="${esc(draft.deliveryDate)}">${fieldError("deliveryDate")}<p class="hint">${today ? `Today in Europe/Helsinki is ${esc(formatDate(today))}.` : "Helsinki today was not returned; the server will reject a past date."}</p></div>
         <div class="field"><label for="budget">Goods budget, VAT included (EUR)</label><input id="budget" name="budget" inputmode="decimal" value="${esc(draft.budget)}" autocomplete="off">${fieldError("budget")}<p class="hint">Delivery and payment charges are not included.</p></div>
         <div class="field"><label for="preference">Ranking preference</label><select id="preference" name="preference">${PREFERENCES.map(([value, label]) => `<option value="${value}" ${draft.preference === value ? "selected" : ""}>${label}</option>`).join("")}</select><p class="hint">${esc(PREFERENCES.find(([value]) => value === draft.preference)[2])}</p></div>
-        ${fixture ? `<div class="field"><label for="scenario">Fixture scenario</label><select id="scenario" name="scenario"><option value="normal" ${draft.scenario === "normal" ? "selected" : ""}>Normal</option><option value="shortage" ${draft.scenario === "shortage" ? "selected" : ""}>Stock shortage</option><option value="late" ${draft.scenario === "late" ? "selected" : ""}>Late date</option></select><p class="hint">Injected fixture only. Not a live organizer result.</p></div>` : `<div class="field"><p class="label">Fixture scenario</p><p class="hint">${session && session.mode === "live" ? "Hidden in live mode." : "Hidden until the session reports fixture mode."}</p></div>`}
+        ${fixture ? `<div class="field"><label for="scenario">Fixture scenario</label><select id="scenario" name="scenario"><option value="normal" ${draft.scenario === "normal" ? "selected" : ""}>Normal</option><option value="shortage" ${draft.scenario === "shortage" ? "selected" : ""}>Stock shortage</option><option value="late" ${draft.scenario === "late" ? "selected" : ""}>Late date</option></select><p class="hint">Demo-only stock/date problem to show recovery.</p></div>` : ""}
       </div>
       <fieldset class="stack"><legend class="label">Dietary requirements</legend><div class="checks">${DIET.map(([value, label]) => check("diet", value, label, draft.dietaryRequirements.includes(value))).join("")}</div></fieldset>
       <details class="constraint-details" ${draft.excludedAllergens.length ? "open" : ""}><summary>Excluded allergens (${draft.excludedAllergens.length})</summary><fieldset class="stack"><legend class="visually-hidden">Excluded allergens</legend><div class="checks">${ALLERGENS.map(([value, label]) => check("allergen", value, label, draft.excludedAllergens.includes(value))).join("")}</div><p class="hint">Unknown evidence blocks the affected purchase.</p></fieldset></details>
-      <div class="check"><input id="dietaryConfirmed" name="dietaryConfirmed" type="checkbox" ${draft.dietaryConfirmed ? "checked" : ""}><label for="dietaryConfirmed">I confirm these dietary requirements and allergen exclusions. Empty lists mean no extra restriction was declared.</label></div>
+      <div class="check"><input id="dietaryConfirmed" name="dietaryConfirmed" type="checkbox" ${draft.dietaryConfirmed ? "checked" : ""}><label for="dietaryConfirmed">Dietary needs and allergens above are correct (nothing ticked = no restrictions).</label></div>
       ${fieldError("dietary")}
+      <details class="more-options" ${state.moreOpen || (draft.pantry || []).length || draft.autoCommit ? "open" : ""}><summary>More options: pantry stock, auto-order, recipes</summary><div class="stack">
       <div class="stack-tight"><div class="actions"><h2>Pantry</h2><button type="button" class="button button-quiet" data-action="add-pantry">${icon("plus")} Add pantry row</button></div>
-        <p class="hint">Ingredient key and amount in the recipe unit. Unknown keys are not treated as stock. No stock is invented here.</p>
+        <p class="hint">Already in your kitchen? Enter the ingredient (e.g. flour) and amount in the recipe unit; it is subtracted from the order.</p>
         ${(draft.pantry || []).map((row, index) => `<div class="pantry-row" data-pantry><label class="visually-hidden" for="pantry-key-${index}">Ingredient key</label><input id="pantry-key-${index}" data-key type="text" value="${esc(row.key)}" autocomplete="off"><label class="visually-hidden" for="pantry-amount-${index}">Amount</label><input id="pantry-amount-${index}" data-amount inputmode="decimal" value="${esc(row.amount)}">${iconButton("trash-2", "remove-pantry", "Remove pantry row", `data-index="${index}"`)}${fieldError(`pantry-${index}`)}</div>`).join("")}
       </div>
-      <div class="check"><input id="autoCommit" name="autoCommit" type="checkbox" ${draft.autoCommit ? "checked" : ""}><label for="autoCommit">Place a mock order automatically if this request stays within authority. This does not approve an exception.</label></div>
+      <div class="check"><input id="autoCommit" name="autoCommit" type="checkbox" ${draft.autoCommit ? "checked" : ""}><label for="autoCommit">Order automatically when the basket is within my limit.</label></div>
+      <details class="recipe-details"><summary>Recipe library</summary>${recipesBlock()}</details>
+      </div></details>
       <p class="hint">${esc(limits)}</p>
       <button class="button button-primary" type="submit" ${state.busy === "submit" ? "disabled" : ""}>${state.busy === "submit" ? "Submitting request" : "Submit request"}</button>
-      <details class="recipe-details"><summary>Recipe library</summary>${recipesBlock()}</details>
     </form>`;
   }
 
@@ -639,20 +812,104 @@ function scopeListKnown(session) {
   function jobList(title, jobs, empty) {
     const query = state.filter.trim().toLowerCase();
     const visible = jobs.filter((job) => !query || `${job.brief || ""} ${job.id || ""} ${job.state || ""}`.toLowerCase().includes(query));
-    const rows = visible.map((job) => `<a class="job-row" href="#job/${esc(job.id)}/plan"><span class="wrap-text"><strong>${esc(job.brief || "Untitled request")}</strong><br><span class="meta mono">${esc(job.id || "")}</span></span><span class="${statusClass(job.state)}">${esc(stateLabel(job.state))}</span><span class="meta">${esc(formatDate(job.deliveryDate))}<br>${esc(formatStamp(job.createdAt))}</span></a>`).join("");
-    return `<section class="stack"><div class="field"><label for="request-filter">Filter loaded requests</label><input id="request-filter" value="${esc(state.filter)}" autocomplete="off"></div>
-      <h2>${esc(title)}</h2>${rows || `<p>${esc(empty)}</p>`}</section>`;
+    const rows = visible.map((job) => `<a class="job-row" href="#job/${esc(job.id)}/basket"><span class="wrap-text"><strong>${esc(jobTitle(job))}</strong><br><span class="meta">Delivery ${esc(formatDay(job.deliveryDate))}${job.order && job.order.totals ? ` · ${formatMinor(job.order.totals.grossMinor)}` : job.evaluation && job.evaluation.totals ? ` · ${formatMinor(job.evaluation.totals.grossMinor)}` : ""}</span></span><span class="${statusClass(job.state)}">${esc(stateLabel(job.state))}</span><span class="meta">${esc(formatStamp(job.createdAt))}</span></a>`).join("");
+    const filter = jobs.length > 5 ? `<div class="field"><label for="request-filter">Search orders</label><input id="request-filter" value="${esc(state.filter)}" autocomplete="off"></div>` : "";
+    return `<section class="stack">${filter}<h2>${esc(title)}</h2>${rows || `<p>${esc(empty)}</p>`}</section>`;
   }
 
   function jobView() {
     const job = state.job;
-    if (!job) return `<section class="stack"><h1>Request</h1><p>${state.busy === "job" ? "Loading the request." : "This request is not loaded."}</p></section>`;
+    if (!job) return `<section class="stack"><h1>Order</h1><p>${state.busy === "job" ? "Loading…" : "This order is not loaded."}</p></section>`;
     const actions = availableActions(job, state.session, Date.now());
-    return `<section class="job-layout"><div class="stack"><div class="stack-tight"><p class="${statusClass(job.state)}">${esc(stateLabel(job.state))}</p><h1 class="wrap-text">${esc(job.plan && job.plan.title || job.brief || "Request")}</h1><p>${esc(agentLabel(job.agentMode))}. ${job.agentMode === "deterministic" ? "No external model is interpreting this request." : job.agentMode === "grok" ? "Progress below is limited to returned messages, not private model reasoning." : ""}</p></div>
-      ${requestFacts(job)}
-      <div class="tabs" role="tablist" aria-label="Request views"><button type="button" role="tab" id="tab-plan" aria-controls="panel" aria-selected="${state.route.tab === "plan"}" data-action="tab" data-tab="plan">Plan</button><button type="button" role="tab" id="tab-basket" aria-controls="panel" aria-selected="${state.route.tab === "basket"}" data-action="tab" data-tab="basket">Basket</button><button type="button" role="tab" id="tab-comparison" aria-controls="panel" aria-selected="${state.route.tab === "comparison"}" data-action="tab" data-tab="comparison">Comparison</button><button type="button" role="tab" id="tab-activity" aria-controls="panel" aria-selected="${state.route.tab === "activity"}" data-action="tab" data-tab="activity">${icon("history")} Activity</button></div>
-      <div id="panel" role="tabpanel" aria-labelledby="tab-${esc(state.route.tab)}">${panel(job)}</div></div>
-      <aside class="decision" aria-label="Decision">${decision(job, actions)}</aside></section>`;
+    return `<section class="job-layout">
+      <div class="stack">
+        <div class="stack-tight"><a class="text-link back" href="#requests">← New request</a>
+          <p class="${revealing(job) || isWorking(job) ? "status" : statusClass(job.state)}">${esc(revealing(job) || isWorking(job) ? "Working…" : stateLabel(job.state))}</p>
+          <h1 class="wrap-text">${esc(jobTitle(job))}</h1>
+          <p class="meta">${esc(orderMeta(job))}</p></div>
+        ${stepper(job)}
+        ${revealing(job) || isWorking(job) ? `<section class="working-card" aria-live="polite"><h2>Working on it</h2>${progressList((job.steps || []).slice(0, revealing(job) ? state.reveal.shown : undefined), true)}</section>`
+          : `${exceptionCards(job)}${basketBlock(job)}${stepsSummary(job)}${agentLog(job)}`}
+        ${job.plan && job.plan.recipeId ? `<details class="more"><summary>Recipe and quantities</summary>${planPanel(job)}</details>` : ""}
+        <details class="more"><summary>Compare alternatives</summary>${comparisonPanel(job)}</details>
+        <details class="more"><summary>${icon("history")} Order record</summary>${activityPanel(job)}</details>
+      </div>
+      <aside class="decision" aria-label="Decision">${revealing(job) || isWorking(job) ? `<h2>Decision</h2><p>The agent is checking products. Nothing is ordered yet.</p>` : decision(job, actions)}</aside></section>`;
+  }
+
+  function jobTitle(job) {
+    const brief = parseStyle(job.brief || "").brief || job.brief || "Order";
+    if (job.plan && job.plan.recipeId) return job.plan.title;
+    return brief.charAt(0).toUpperCase() + brief.slice(1);
+  }
+
+  function orderMeta(job) {
+    const parts = [`Delivery ${formatDay(job.deliveryDate)}`];
+    if (Number.isInteger(job.maxGrossMinor)) parts.push(`budget ${formatMinor(job.maxGrossMinor)}`);
+    if ((job.dietaryRequirements || []).length) parts.push(job.dietaryRequirements.map((key) => (DIET.find(([k]) => k === key) || [key, key])[1].replace(" (not milk-free)", "")).join(", "));
+    if ((job.excludedAllergens || []).length) parts.push("no " + job.excludedAllergens.join(", no ").replaceAll("_", " "));
+    return parts.join(" · ");
+  }
+
+  function stepper(job) {
+    const s = revealing(job) && !state.reveal.resolving ? "checking" : revealing(job) ? "planning-order" : job.state;
+    const looked = !["planning"].includes(s) && !(s === "checking" && !job.plan);
+    const ordered = s !== "checking" && (Boolean(job.evaluation) || ["awaiting_approval", "ready", "ordered_mock"].includes(s));
+    const steps = [
+      ["Request", "done"],
+      ["Lookup", looked ? "done" : "active"],
+      [s === "needs_decision" ? "Your decision" : "Order", s === "needs_decision" || s === "planning-order" ? "active" : ordered ? "done" : ""],
+      ["Approval", s === "ordered_mock" ? "done" : s === "awaiting_approval" || s === "ready" ? "active" : ""]
+    ];
+    if (["blocked", "failed", "rejected", "cancelled", "needs_clarification"].includes(s)) steps[ordered ? 3 : 2][1] = "stopped";
+    return `<ol class="stepper-flow">${steps.map(([label, status], index) => `<li class="${status}"><span class="dot">${status === "done" ? "✓" : index + 1}</span>${esc(label)}</li>`).join("")}</ol>`;
+  }
+
+  function exceptionCards(job) {
+    const items = job.exceptions || [];
+    const canAnswer = availableActions(null, state.session, Date.now()).create;
+    const open = items.filter((item) => !item.choice);
+    if (!open.length) return "";
+    return open.map((item) => `<article class="xcard ${item.severity === "blocked" ? "xcard-blocked" : ""}" aria-label="Decision needed">
+      <p class="xkind">${icon("circle-alert")} ${item.severity === "blocked" ? "Can't be ordered" : "Your decision"}</p>
+      <h2>${esc(item.title)}</h2>
+      <p>${esc(item.detail)}</p>
+      ${item.options && item.options.length ? (canAnswer && job.state === "needs_decision" ? `<div class="xoptions">${item.options.map((option) => `<button type="button" class="xoption ${option.primary ? "recommended" : ""}" data-action="resolve" data-exception="${esc(item.id)}" data-option="${esc(option.id)}" ${state.busy ? "disabled" : ""}>
+        <span class="xlabel">${option.primary ? '<span class="tag">Recommended</span>' : ""}${esc(option.label)}</span><span class="xeffect">${esc(option.effect || "")}</span></button>`).join("")}</div>`
+        : `<p class="hint">Waiting for the buyer's decision.</p>`) : `<div class="actions-inline"><button type="button" class="button button-secondary" data-action="revise">${icon("pencil")} Change the request</button></div>`}
+    </article>`).join("");
+  }
+
+  function basketBlock(job) {
+    const order = job.order;
+    const evaluation = job.evaluation;
+    const lines = (order && order.lines) || (evaluation && evaluation.lines) || [];
+    const body = lines.length ? lines.map((line) => productRow(line, job)).join("") : proposedRows(job);
+    if (!body) return job.state === "planning" || job.state === "checking" ? `<p class="working">${icon("search")} Finding products and checking live price and stock…</p>` : "";
+    const totals = (order || evaluation || {}).totals;
+    return `<section class="stack-tight basket"><div class="actions-inline"><h2>${order ? "Ordered" : evaluation ? "Basket" : "Proposed basket"}</h2>${totals ? `<p class="basket-total">${formatMinor(totals.grossMinor)} <span class="hint">incl. VAT</span></p>` : ""}</div>
+      <div class="list">${body}</div>
+      ${evaluation && !order ? `<p class="hint">Price and stock checked ${esc(formatStamp(evaluation.checkedAt))} · checked again before ordering.</p>` : ""}</section>`;
+  }
+
+  function stepsSummary(job) {
+    const steps = job.steps || [];
+    if (!steps.length) return "";
+    return `<details class="more steps-summary"><summary>✓ ${steps.length} checks done · ${esc(steps.map((step) => step.label.toLowerCase()).slice(1, 4).join(" · "))}</summary>${progressList(steps, false)}</details>`;
+  }
+
+  function agentLog(job) {
+    const plan = job.plan || {};
+    let lines = (plan.explanations || []).map(textOf).filter((text) => text && !/^Deterministic|^The planner|^Reliability is|^Candidates compared|^Live comparison/.test(text) && !/ chose: /.test(text));
+    const skipped = lines.filter((text) => text.startsWith("Skipped "));
+    if (skipped.length > 2) {
+      const reasons = {};
+      skipped.forEach((text) => { const why = (text.split(" — ")[1] || "not orderable").replace(/ \(.*\)$/, ""); reasons[why] = (reasons[why] || 0) + 1; });
+      lines = [`Skipped ${skipped.length} products — ${Object.entries(reasons).map(([why, count]) => `${why} (${count})`).join(", ")}. See Compare alternatives.`, ...lines.filter((text) => !text.startsWith("Skipped "))];
+    }
+    const progress = (job.messages || []).map(textOf).filter(Boolean);
+    if (!lines.length && !progress.length) return "";
+    return `<details class="more agent-log" open><summary>What happened and why</summary><div class="log-cols"><div><p class="label">Agent decisions</p><ul>${lines.map((text) => `<li>${esc(text)}</li>`).join("") || "<li class=\"hint\">No choices needed.</li>"}</ul></div><div><p class="label">Timeline</p><ol class="timeline">${progress.map((text) => `<li>${esc(text)}</li>`).join("")}</ol></div></div></details>`;
   }
 
   function requestFacts(job) {
@@ -664,9 +921,9 @@ function scopeListKnown(session) {
       ["Delivery date", formatDate(job.deliveryDate)],
       ["Goods budget", formatMinor(job.maxGrossMinor)],
       ["Preference", job.preference || "Not supplied"],
-      ["Auto-commit", job.autoCommit ? "Requested. It does not approve an exception." : "Not requested"],
-      ["Scenario", job.scenario ? `${job.scenario}${job.mode === "fixture" ? " (fixture)" : ""}` : "Not supplied"]
     ];
+    if (job.autoCommit) rows.push(["Auto-order", "Within my limit"]);
+    if (job.mode === "fixture" && job.scenario && job.scenario !== "normal") rows.push(["Demo scenario", job.scenario]);
     if (Array.isArray(job.dietaryRequirements)) rows.push(["Dietary requirements", job.dietaryRequirements.join(", ") || "None declared"]);
     if (Array.isArray(job.excludedAllergens)) rows.push(["Excluded allergens", job.excludedAllergens.join(", ") || "None declared"]);
     return `<dl class="facts">${rows.map(([label, value]) => `<dt>${esc(label)}</dt><dd>${esc(value)}</dd>`).join("")}</dl>`;
@@ -690,7 +947,7 @@ function scopeListKnown(session) {
       <dl class="facts"><dt>Recipe</dt><dd>${esc(plan.title || "Not named")}</dd><dt>Recipe id</dt><dd class="mono">${esc(plan.recipeId || "Not supplied")}</dd><dt>Source</dt><dd>${esc(plan.recipeSource || "Not supplied")}</dd><dt>Yield</dt><dd>${plan.servings == null ? "Not supplied" : `${esc(plan.servings)} servings`}</dd></dl>
       ${questions.length ? `<div class="alert"><h2>Clarification</h2>${questions.map((item) => `<p>${esc(item)}</p>`).join("")}</div>` : ""}
       ${warnings.map((item) => `<p class="notice">${esc(item)}</p>`).join("")}
-      ${explanations.map((item) => `<p>${esc(item)}</p>`).join("")}
+      ${explanations.length ? `<details class="explain"><summary>How this was calculated</summary>${explanations.map((item) => `<p>${esc(item)}</p>`).join("")}</details>` : ""}
       <h2>Ingredient calculation</h2>
       <div class="list">${(plan.ingredients || []).map(ingredientRow).join("") || "<p>No ingredient rows were returned.</p>"}</div>
       ${messages(job)}</div>`;
@@ -706,10 +963,10 @@ function scopeListKnown(session) {
     const order = job.order;
     const evaluation = job.evaluation;
     const lines = (order && order.lines) || (evaluation && evaluation.lines) || [];
-    const source = order ? "Exact mock-order snapshot" : evaluation ? "Evaluated basket" : "Proposed lines";
+    const source = order ? "Ordered basket" : evaluation ? "Checked basket" : "Proposed basket";
     const body = lines.length ? lines.map((line) => productRow(line, job)).join("") : proposedRows(job);
-    return `<div class="stack"><p>${esc(source)}. ${esc(modeLabel((evaluation && evaluation.mode) || job.mode))}</p>
-      <p class="hint">Supply check ${esc(formatStamp(evaluation && evaluation.checkedAt))}. Expires ${esc(formatStamp(evaluation && evaluation.expiresAt))}. An availability lookup is not reserved stock.</p>
+    return `<div class="stack"><p>${esc(source)} · ${esc(modeLabel((evaluation && evaluation.mode) || job.mode))} · ${lines.length || (job.plan && job.plan.lines || []).length} products</p>
+      <p class="hint">Prices and stock checked ${esc(formatStamp(evaluation && evaluation.checkedAt))}, valid until ${esc(formatStamp(evaluation && evaluation.expiresAt))}. Checking does not reserve stock.</p>
       ${totalsBlock(order || evaluation, job)}
       <div class="list">${body || "<p>No basket lines have been returned.</p>"}</div>
       ${reasonsBlock(evaluation && evaluation.reasons)}</div>`;
@@ -730,11 +987,11 @@ function scopeListKnown(session) {
     const pricing = line.pricing;
     const availability = line.availability;
     const ingredient = ((job.plan && job.plan.ingredients) || []).filter((item) => item.productId === line.productId);
-    const calc = ingredient.map((item) => `${item.label || item.key}: needed ${item.needed ?? "—"} ${item.unit || ""}, overage ${item.overage ?? "—"}`).join("; ");
-    return `<article class="product-row"><div>${image ? `<img class="thumb" src="${esc(image)}" alt="" referrerpolicy="no-referrer">` : `<div class="placeholder">No product image</div>`}</div>
-      <div><h3 class="product-name">${esc(line.name || meta && meta.name || "Product")}</h3><p class="meta mono">${esc(line.productId || "")}</p><p>${esc(line.salesUnit || "Unit not supplied")} · pack ${esc(meta && meta.packAmount || "not supplied")}</p>${calc ? `<p>${esc(calc)}</p>` : ""}${line.reasons && line.reasons.length ? `<p>${line.reasons.map((reason) => esc(reason.message || reasonLabel(reason.code))).join(" ")}</p>` : ""}</div>
-      <div class="qty"><p class="label">Ordered</p><p class="mono">${esc(line.quantity ?? "—")}</p><p class="hint">${availabilityText(availability)}</p></div>
-      <div class="total"><p class="label">Line total</p><p class="mono">${pricing ? formatMinor(pricing.grossMinor) : "Not available"}</p><p class="hint">${pricing ? `${esc(pricing.unitNet)} net / ${esc(pricing.unitGross)} gross, VAT ${esc(pricing.taxRate)}%` : "Missing prices are not shown as zero."}</p>${pricing && pricing.netPriceFound === false ? `<p class="hint">Net price was not found. List and comparison prices are not charged.</p>` : ""}</div></article>`;
+    const calc = ingredient.map((item) => `For ${String(item.label || item.key).toLowerCase()}: need ${item.needed ?? "—"} ${item.unit || ""}${Number(item.overage) > 0 ? `, ${item.overage} ${item.unit || ""} extra from pack size` : ""}`).join("; ");
+    return `<article class="product-row"><div>${image ? `<img class="thumb" src="${esc(image)}" alt="" referrerpolicy="no-referrer">` : placeholderIcon()}</div>
+      <div><h3 class="product-name">${esc(line.name || meta && meta.name || "Product")}</h3><p class="meta mono">${esc(line.productId || "")}${meta && meta.reliability != null ? ` · delivered in full ${Math.round(meta.reliability * 100)} %` : ""}</p>${meta && (meta.labels || []).filter((label) => !/_|Temperature/.test(label)).length ? `<p class="badges">${meta.labels.filter((label) => !/_|Temperature/.test(label)).map((label) => `<span class="badge">${esc(label)}</span>`).join("")}</p>` : ""}${calc ? `<p>${esc(calc)}</p>` : ""}${line.reasons && line.reasons.length ? `<p>${line.reasons.map((reason) => esc(reason.message || reasonLabel(reason.code))).join(" ")}</p>` : ""}</div>
+      <div class="qty"><p class="label">Quantity</p><p class="mono">${esc(line.quantity == null ? "—" : formatQuantity(line.quantity))}${meta && meta.unit && meta.packAmount ? ` × ${esc(formatQuantity(meta.packAmount))} ${esc(meta.unit)}` : ""}</p><p class="hint"><span class="stock${availability && availability.quantityConfirmed && Number(availability.availableQuantity) <= Number(line.quantity) ? " low" : ""}${!availability ? " none" : ""}">${availabilityText(availability)}</span></p></div>
+      <div class="total"><p class="label">Line total</p><p class="mono">${pricing ? formatMinor(pricing.grossMinor) : "Not available"}</p><p class="hint">${pricing ? `€${esc(Number(pricing.unitGross).toFixed(2))} each incl. VAT` : "Price missing, so it is not counted as zero."}</p></div></article>`;
   }
 
   function candidateFor(job, productId) {
@@ -748,10 +1005,10 @@ function scopeListKnown(session) {
 
   function availabilityText(availability) {
     if (!availability) return "Delivery result not checked.";
-    if (availability.quantityConfirmed === false || availability.logisticModel === "Terminal" || availability.logisticModel === "Unknown") return `${availability.logisticModel || "Quantity"} is not confirmed. Not reserved stock.`;
+    if (availability.quantityConfirmed === false || availability.logisticModel === "Terminal" || availability.logisticModel === "Unknown") return "Stock quantity not confirmed by Aimo.";
     const date = availability.availableDate ? formatDate(availability.availableDate) : "date not supplied";
     const cutoff = availability.closingTime ? formatStamp(availability.closingTime) : "cutoff not supplied";
-    return `Checked for ${date}. Cutoff ${cutoff}. Available ${availability.availableQuantity ?? "—"}. Not reserved.`;
+    return `${stockText(availability.availableQuantity)} · order by ${formatCutoff(availability.closingTime) || cutoff}`;
   }
 
   function totalsBlock(source, job) {
@@ -765,24 +1022,40 @@ function scopeListKnown(session) {
 
   function comparisonPanel(job) {
     const plan = job.plan;
-    if (!plan) return `<p>Comparison is available after a plan is returned.</p>`;
-    const preference = state.rank || job.preference || "balanced";
-    const comparison = plan.comparison || {};
-    return `<div class="stack"><div class="field"><label for="rank-preference">Display ranking</label><select id="rank-preference">${PREFERENCES.map(([value, label]) => `<option value="${value}" ${preference === value ? "selected" : ""}>${label}</option>`).join("")}</select><p class="hint">This reorders supplied candidates for review. It does not change the basket, run a new check, or keep an existing approval.</p></div>
-      <button type="button" class="button button-secondary" data-action="use-ranking">Use this ranking in a new request</button>
-      <dl class="facts"><dt>Lowest historical delivery ratio</dt><dd>${comparison.reliability == null ? "Not available" : `${Math.round(comparison.reliability * 100)}%`}</dd><dt>Category carbon estimate</dt><dd>${comparison.carbonKgEstimate == null ? "Not available" : `${esc(comparison.carbonKgEstimate)} kg CO2e`}</dd><dt>Ordered lines with carbon data</dt><dd>${comparison.carbonCoverage == null ? "Not available" : `${Math.round(comparison.carbonCoverage * 100)}%`}</dd></dl>
-      <p class="hint">Reliability is historical, not a delivery guarantee. Carbon is a category average, not an individual product measurement. Coverage must be read with the estimate.</p>
-      ${(plan.ingredients || []).map((item) => `<section class="stack-tight"><h2 class="wrap-text">${esc(item.label || item.key)}</h2>${rankCandidates(item.candidates, preference).map((candidate) => candidateRow(candidate, item.productId)).join("") || "<p>No candidates were returned.</p>"}</section>`).join("")}</div>`;
+    if (!plan || !(plan.ingredients || []).length) return `<p class="hint">Alternatives appear after the lookup.</p>`;
+    const chosen = new Set(((job.order || job.evaluation || {}).lines || plan.lines || []).map((line) => line.productId));
+    return `<div class="stack">${plan.ingredients.map((item) => {
+      const rows = (item.candidates || []).map((candidate) => {
+        const inBasket = chosen.has(candidate.productId);
+        const skipped = candidate.available === false;
+        const why = skipped ? (candidate.reasons || []).map((reason) => SHORT_REASONS[reason.code] || reasonLabel(reason.code))[0] || "Not orderable" : "";
+        const price = candidate.perUnitGross ? `€${String(candidate.perUnitGross)} / ${candidate.unit || "unit"}` : candidate.purchaseGrossMinor != null ? formatMinor(candidate.purchaseGrossMinor) : "—";
+        return { inBasket, skipped, sortPrice: Number(candidate.perUnitGross || candidate.purchaseGrossMinor || 1e9), html: `<tr class="${inBasket ? "chosen" : skipped ? "skipped" : ""}">
+          <td><strong>${esc(candidate.name || candidate.productId)}</strong>${(candidate.labels || []).filter((label) => !/_|Temperature/.test(label)).length ? `<br><span class="badges">${candidate.labels.filter((label) => !/_|Temperature/.test(label)).map((label) => `<span class="badge">${esc(label)}</span>`).join("")}</span>` : ""}</td>
+          <td class="num">${esc(price)}</td>
+          <td>${candidate.stockAmount ? `${esc(formatQuantity(candidate.stockAmount))} ${esc(candidate.unit || "")}` : skipped ? "—" : "In stock"}</td>
+          <td class="num">${candidate.reliability == null ? "—" : `${Math.round(candidate.reliability * 100)} %`}</td>
+          <td>${inBasket ? "<strong>In basket</strong>" : skipped ? esc(why) : "Alternative"}</td></tr>` };
+      }).sort((a, b) => (b.inBasket - a.inBasket) || (a.skipped - b.skipped) || (a.sortPrice - b.sortPrice));
+      return `<section class="stack-tight"><h3>${esc(item.label || item.key)}</h3><div class="table-wrap"><table class="compare"><thead><tr><th>Product</th><th class="num">Price</th><th>Stock</th><th class="num">Delivered in full</th><th>Status</th></tr></thead><tbody>${rows.map((row) => row.html).join("")}</tbody></table></div></section>`;
+    }).join("")}<p class="hint">Delivered in full = share of past orders delivered completely (Valio Aimo history).</p></div>`;
   }
 
-  function candidateRow(candidate, selectedId) {
-    const image = candidate.imageUrl ? `<img class="thumb" src="${esc(resolveAsset(candidate.imageUrl, assetBase().href))}" alt="" referrerpolicy="no-referrer">` : `<div class="placeholder">No product image</div>`;
-    return `<article class="candidate">${image}<div><h3 class="product-name">${esc(candidate.name || candidate.productId)}</h3><p class="meta mono">${esc(candidate.productId || "")} · ${esc(candidate.salesUnit || "")} · pack ${esc(candidate.packAmount ?? "—")}</p><p>${candidate.productId === selectedId ? "Selected. " : ""}${Array.isArray(candidate.labels) && candidate.labels.length ? esc(candidate.labels.map(label => label.toLowerCase().replaceAll("_", " ")).join(", ")) : ""}</p></div><p>Purchase ${candidate.purchaseGrossMinor == null ? "not checked" : formatMinor(candidate.purchaseGrossMinor)}<br>Delivery ratio ${candidate.reliability == null ? "unknown" : `${Math.round(candidate.reliability * 100)}%`}<br>Carbon ${candidate.carbonKgPerKg == null ? "unknown" : `${esc(candidate.carbonKgPerKg)} kg/kg`}<br>${candidate.available == null ? "Not checked" : candidate.available ? "Available on requested date" : "Unavailable / blocked"}</p></article>`;
-  }
+  const SHORT_REASONS = {
+    CUTOFF_PASSED: "Cutoff passed",
+    DELIVERY_UNAVAILABLE: "Not available",
+    QUANTITY_UNCONFIRMED: "Stock unconfirmed",
+    SALES_BLOCK: "Sales blocked",
+    DIETARY_CONFLICT: "Fails diet",
+    DIETARY_UNCONFIRMED: "Diet info missing",
+    PRICE_UNAVAILABLE: "No price",
+    DELIVERY_DATE_MISMATCH: "Wrong day",
+    INSUFFICIENT_STOCK: "Not enough stock"
+  };
 
   function activityPanel(job) {
     const events = Array.isArray(state.events) ? state.events : [];
-    return `<div class="stack">${messages(job)}<h2>Gateway audit</h2>${events.length ? `<div class="list">${events.map(eventRow).join("")}</div>` : "<p>No audit events have been loaded.</p>"}</div>`;
+    return `<div class="stack"><p class="hint">Every action by the buyer, the agent and the kitchen manager, as recorded by the ordering gateway.</p>${events.length ? `<div class="list">${events.map(eventRow).join("")}</div>` : "<p>No audit events have been loaded.</p>"}</div>`;
   }
 
   function messages(job) {
@@ -798,13 +1071,14 @@ function scopeListKnown(session) {
       "basket.created": "Basket created",
       "basket.replaced": "Basket replaced",
       "basket.evaluated": "Basket evaluated",
-      "evaluation.decided": "Evaluation decided",
-      "order.attempted": "Mock order attempted",
-      "order.refused": "Mock order refused",
-      "order.created": "Mock order placed"
+      "evaluation.decided": "Approval decision",
+      "order.attempted": "Order submitted",
+      "order.refused": "Order refused",
+      "order.created": "Order placed"
     }[event.type] || event.type || "Event";
     const codes = (event.reasonCodes || []).map(reasonLabel).join(", ");
-    return `<article class="event"><p class="mono">${esc(event.sequence ?? "")}</p><div><h3>${esc(label)}</h3><p>${esc(event.summary || "")}</p>${codes ? `<p>${esc(codes)}</p>` : ""}</div><p class="meta">${esc(event.actorId || "Actor not supplied")}<br>${esc(formatStamp(event.at))}</p></article>`;
+    const summary = event.summary && event.summary.toLowerCase() !== label.toLowerCase() ? event.summary : "";
+    return `<article class="event"><p class="mono">${esc(event.sequence ?? "")}</p><div><h3>${esc(label)}</h3>${summary ? `<p>${esc(summary)}</p>` : ""}${codes ? `<p class="hint">${esc(codes)}</p>` : ""}</div><p class="meta">${esc(roleLabel(event.actorId))}<br>${esc(formatStamp(event.at))}</p></article>`;
   }
 
   function reasonLabel(code) {
@@ -819,60 +1093,62 @@ function scopeListKnown(session) {
   function decision(job, actions) {
     const evaluation = job.evaluation || {};
     const order = job.order;
-    const expired = evaluationExpired(job, Date.now());
-    const parts = [`<h2>Decision</h2>`, `<p class="${statusClass(job.state)}">${esc(stateLabel(job.state))}</p>`];
-    if (order) {
-      parts.push(`<p><strong>Mock order placed.</strong> This is not supplier acceptance, payment, or a delivery guarantee.</p>`);
-      parts.push(`<dl class="facts"><dt>Mock order</dt><dd class="mono">${esc(order.id || "Not supplied")}</dd><dt>Actor</dt><dd>${esc(order.committedBy || "Not supplied")}</dd><dt>Recorded</dt><dd>${esc(formatStamp(order.committedAt))}</dd><dt>Requested delivery</dt><dd>${esc(formatDate(order.requestedDeliveryDate || job.deliveryDate))}</dd><dt>Basket version</dt><dd>${esc(evaluation.basketVersion || job.basket && job.basket.version || "Not supplied")}</dd></dl>`);
-    } else {
-      parts.push(`<p>${esc(decisionSummary(job))}</p>`);
-      parts.push(reasonsBlock(evaluation.reasons));
-      if (evaluation.totals) parts.push(`<p>Gross goods ${formatMinor(evaluation.totals.grossMinor)}. ${esc(deliveryEffect(evaluation))}</p>`);
-      if (job.basket && job.basket.version) parts.push(`<p class="hint">Basket version ${esc(job.basket.version)}. A changed basket needs a new request and does not keep this approval.</p>`);
+    const total = (order || evaluation).totals;
+    const limit = state.session && state.session.policy && state.session.policy.autonomousLimitMinor;
+    const parts = [`<h2>Decision</h2>`];
+    if (total) parts.push(`<p class="decision-total">${formatMinor(total.grossMinor)}</p>`);
+    if (state.placing) {
+      parts.push(progressList(state.placing, false));
+      return parts.join("");
     }
-    if (expired && !["ordered_mock", "rejected", "cancelled", "failed"].includes(job.state)) parts.push(`<p>The check has expired.</p><button class="button button-secondary" type="button" data-action="recheck">${icon("refresh-cw")} Recheck availability</button>`);
-    if (job.state === "awaiting_approval" && !actions.approve) parts.push(`<p>Waiting for an authorized manager.</p>`);
-    if (job.state === "ready" && !expired && !actions.commit) parts.push(`<p>This principal does not have orders:commit, so mock commitment is not offered.</p>`);
-    parts.push(`<div class="actions">${actionButtons(job, actions)}</div>`);
+    if (order) {
+      const evaluationId = order.evaluationId || evaluation.id;
+      const recordedDecision = Array.isArray(state.events) && state.events.slice().reverse().find((event) =>
+        event.type === "evaluation.decided" && evaluationId && event.evaluationId === evaluationId);
+      // Decision events may omit the outcome; committing this evaluation required its approval.
+      const approved = recordedDecision && (recordedDecision.outcome == null || recordedDecision.outcome === "approve");
+      const approval = approved ? `<dt>Approved by</dt><dd>${esc(roleLabel(recordedDecision.actorId))}</dd>`
+        : Array.isArray(state.events) && !recordedDecision && evaluation.outcome === "allowed"
+          ? `<dt>Approval</dt><dd>Not needed (within authority)</dd>`
+          : `<dt>Approval</dt><dd>Not available</dd>`;
+      parts.push(`<p><strong>Order placed</strong> · delivery ${esc(formatDay(order.requestedDeliveryDate || job.deliveryDate))}</p>`);
+      parts.push(`<dl class="facts"><dt>Order number</dt><dd class="mono" title="${esc(order.id || "")}">${esc(orderNumber(order.id))}</dd><dt>Requested by</dt><dd>Chef (buyer)</dd><dt>Sourced by</dt><dd>Buyer agent</dd>${approval}<dt>Placed by</dt><dd>${esc(roleLabel(order.committedBy))}</dd><dt>Placed</dt><dd>${esc(formatStamp(order.committedAt))}</dd></dl>`);
+      parts.push(`<button type="button" class="button button-quiet" data-action="export">${icon("download")} Download order record</button>`);
+      return parts.join("");
+    }
+    if (job.state === "needs_decision") parts.push(`<p>Answer the question to continue. Nothing is ordered yet.</p>`);
+    else if (job.state === "awaiting_approval") parts.push(`<p>${actions.approve ? `Over the buyer's ${esc(formatMinor(limit))} limit. Your approval places the order.` : `Over your ${esc(formatMinor(limit))} limit, so it went to your kitchen manager.`}</p>`);
+    else parts.push(`<p>${esc(decisionSummary(job))}</p>`);
+    if (job.state === "blocked") parts.push(reasonsBlock(evaluation.reasons));
     if (state.confirm) parts.push(confirmBlock());
-    if (actions.approve) parts.push(`<div class="field"><label for="decision-comment">Decision note</label><textarea id="decision-comment" maxlength="500">${esc(state.comment)}</textarea><p class="hint">Optional. The approver is the signed-in principal, not the planner.</p></div>`);
-    parts.push(`<button type="button" class="button button-quiet" data-action="export">${icon("download")} Export record</button>`);
+    else parts.push(`<div class="actions">${actionButtons(job, actions)}</div>`);
     return parts.join("");
   }
 
   function decisionSummary(job) {
-    if (job.state === "awaiting_approval") return "Manager approval required for this basket.";
-    if (job.state === "ready") return job.autoCommit ? "Ready inside the recorded authority. Auto-commit was requested and does not replace approval." : "Ready for an explicit mock order. No supplier order will be sent.";
-    if (job.state === "blocked") return "The purchase is blocked. Missing evidence is not treated as success.";
-    if (job.state === "needs_clarification") return "The planner needs a clearer request. Revise and submit a new one.";
-    if (job.state === "rejected") return "Rejection stops this workflow. A revision is a new request.";
-    if (job.state === "planning" || job.state === "checking") return "The workspace is still working. No completion is assumed.";
-    if (job.state === "failed") return job.error || "The workspace reported a failure.";
-    if (job.state === "cancelled") return "The request was cancelled.";
-    return "No decision is available yet.";
-  }
-
-  function deliveryEffect(evaluation) {
-    const line = (evaluation.lines || []).find((item) => item.availability);
-    if (!line) return "Delivery effect has not been checked.";
-    return availabilityText(line.availability);
+    if (job.state === "ready") return job.evaluation && (job.evaluation.reasons || []).length ? "Approved. Ready to place." : "Within your limit. Ready to order.";
+    if (job.state === "blocked") return "Can't be ordered as requested.";
+    if (job.state === "needs_clarification") return "The agent needs more detail. Change the request.";
+    if (job.state === "rejected") return "Rejected by the kitchen manager.";
+    if (job.state === "failed") return job.error || "Something went wrong. Nothing was ordered.";
+    if (job.state === "cancelled") return "Cancelled. Nothing was ordered.";
+    return "Working…";
   }
 
   function actionButtons(job, actions) {
     const buttons = [];
-    if (actions.approve && state.confirm !== "approve") buttons.push(`<button type="button" class="button button-secondary" data-action="ask-approve">${icon("shield")} Approve purchase</button>`);
-    if (actions.reject && state.confirm !== "reject") buttons.push(`<button type="button" class="button button-danger" data-action="ask-reject">Reject</button>`);
-    if (actions.commit && state.confirm !== "commit") buttons.push(`<button type="button" class="button button-primary" data-action="ask-commit">${icon("circle-check")} Place mock order</button>`);
-    if (actions.cancel && state.confirm !== "cancel") buttons.push(`<button type="button" class="button button-quiet" data-action="ask-cancel">Cancel request</button>`);
-    if (actions.revise) buttons.push(`<button type="button" class="button button-quiet" data-action="revise">${icon("pencil")} Revise as new request</button>`);
-    else buttons.push(`<p>This principal cannot start a replacement request.</p>`);
+    if (actions.approve) buttons.push(`<button type="button" class="button button-primary button-big" data-action="ask-approve">${icon("circle-check")} Approve &amp; place order</button>`);
+    if (actions.reject) buttons.push(`<button type="button" class="button button-quiet" data-action="ask-reject">Reject</button>`);
+    if (job.state === "ready" && hasScope(state.session, "orders:commit")) buttons.push(`<button type="button" class="button button-primary button-big" data-action="ask-commit">${icon("circle-check")} Place order</button>`);
+    if (["blocked", "needs_clarification", "rejected", "failed"].includes(job.state) && actions.revise) buttons.push(`<button type="button" class="button button-secondary" data-action="revise">${icon("pencil")} Change the request</button>`);
+    if (actions.cancel && !actions.approve) buttons.push(`<button type="button" class="button button-quiet" data-action="ask-cancel">Cancel request</button>`);
     return buttons.join("");
   }
 
   function confirmBlock() {
-    const labels = { approve: "Record approval for this exact basket?", reject: "Reject this basket? This cannot be reversed on the same request.", commit: "Place a local mock order for the current checked basket?", cancel: "Cancel this request?" };
+    const labels = { approve: "Approve and place this order? Price and stock are checked once more.", reject: "Reject this order?", commit: "Place this order? Price and stock are checked once more.", cancel: "Cancel this request?" };
     const tone = state.confirm === "reject" || state.confirm === "cancel" ? "button-danger" : "button-primary";
-    return `<div class="notice"><p>${esc(labels[state.confirm] || "Confirm this action?")}</p><div class="actions"><button type="button" class="button ${tone}" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "Working" : "Confirm"}</button><button type="button" class="button button-quiet" data-action="dismiss">Back</button></div></div>`;
+    return `<div class="notice"><p>${esc(labels[state.confirm] || "Confirm this action?")}</p><div class="actions"><button type="button" class="button ${tone}" data-action="confirm" ${state.busy ? "disabled" : ""}>${state.busy ? "Working…" : "Yes, continue"}</button><button type="button" class="button button-quiet" data-action="dismiss">Back</button></div></div>`;
   }
 
   async function boot() {
@@ -916,14 +1192,14 @@ function scopeListKnown(session) {
 
   async function loadJob(id, includeEvents) {
     const seq = ++state.jobSeq;
+    if (!state.job || state.job.id !== id) state.events = null;
     state.busy = state.job && state.job.id === id ? state.busy : "job";
     try {
       const job = await request("GET", `/workspace/jobs/${encodeURIComponent(id)}`);
       if (seq !== state.jobSeq) return;
       state.job = job;
-      state.error = "";
       if (!state.rank) state.rank = job.preference || "balanced";
-      if (includeEvents || state.route.tab === "activity") await loadEvents(id, seq);
+      if (includeEvents || state.route.tab === "activity" || job.order) await loadEvents(id, seq);
     } catch (error) {
       if (seq !== state.jobSeq) return;
       if (error.status === 401) return unauthenticated();
@@ -934,6 +1210,7 @@ function scopeListKnown(session) {
   }
 
   async function loadEvents(id, seq) {
+    state.events = null;
     const payload = await request("GET", `/workspace/jobs/${encodeURIComponent(id)}/events`);
     if (seq !== state.jobSeq) return;
     state.events = Array.isArray(payload) ? payload : (payload && payload.events) || [];
@@ -946,7 +1223,7 @@ function scopeListKnown(session) {
     const listActive = state.jobs.some((job) => shouldPoll(job.state));
     const jobActive = current ? shouldPoll(current.state) : false;
     if (!listActive && !jobActive && state.jobs.length) return;
-    state.pollTimer = window.setTimeout(poll, 1500);
+    state.pollTimer = window.setTimeout(poll, current && (isWorking(current) || revealing(current)) ? 700 : 2500);
   }
 
   async function poll() {
@@ -955,8 +1232,12 @@ function scopeListKnown(session) {
       return;
     }
     try {
-      await loadJobs();
-      if (state.route.view === "job" && state.route.id) await loadJob(state.route.id, state.route.tab === "activity");
+      // Stay well under the gateway's per-user rate limit: while the agent works, poll only the open order.
+      const current = state.route.view === "job" ? state.job : null;
+      const working = Boolean(current && (isWorking(current) || revealing(current)));
+      state.pollCount = (state.pollCount || 0) + 1;
+      if (!current || !working && state.pollCount % 3 === 0) await loadJobs();
+      if (state.route.view === "job" && state.route.id) await loadJob(state.route.id, !working && state.pollCount % 3 === 0);
       state.notice = "";
     } catch (error) {
       if (error.status === 401) return unauthenticated();
@@ -1021,14 +1302,123 @@ function scopeListKnown(session) {
       state.busy = "";
       state.draft = emptyDraft();
       if (state.session && state.session.today) state.draft.deliveryDate = addDays(state.session.today, 2);
+      state.ask = "";
+      state.understood = null;
+      state.showForm = false;
       state.job = job;
-      go(`#job/${job.id}/plan`);
+      startReveal(job, false);
+      go(`#job/${job.id}/basket`);
     } catch (error) {
       state.busy = "";
       if (error.status === 401) return unauthenticated();
       state.error = error.message;
       render();
     }
+  }
+
+  async function interpretAsk() {
+    const text = (state.ask || "").trim();
+    if (!text) return setError("Tell me what you need first.");
+    state.busy = "interpret";
+    state.error = "";
+    state.understood = null;
+    state.showForm = false;
+    state.thinking = [{ label: "Reading your request", done: false }];
+    render();
+    try {
+      const started = Date.now();
+      const result = await request("POST", "/workspace/interpret", { text });
+      await pace(450 - (Date.now() - started));
+      const fields = result.fields || {};
+      const found = result.kind === "recipe" ? [chipValue("style", fields.style || {}), fields.servings && fields.servings.value ? `${fields.servings.value} guests` : ""]
+        : [chipValue("items", fields.items || { value: [] })];
+      if (fields.deliveryDate && fields.deliveryDate.value) found.push(formatDay(fields.deliveryDate.value));
+      state.thinking = [{ label: "Reading your request", detail: found.filter(Boolean).join(" · ") || "unclear" },
+        { label: "Checking what's missing", done: false }];
+      render();
+      await pace(450);
+      const questions = (result.questions || []).length;
+      const assumed = Object.values(fields).filter((field) => field && field.source === "default").length;
+      state.thinking[1] = { label: "Checking what's missing", detail: questions ? `${questions} question${questions > 1 ? "s" : ""} for you` : `nothing missing${assumed ? ` · ${assumed} assumed` : ""}` };
+      render();
+      await pace(300);
+      state.understood = result;
+      applyUnderstood(result);
+    } catch (error) {
+      if (error.status === 401) return unauthenticated();
+      state.error = error.message;
+    } finally {
+      state.busy = "";
+      state.thinking = null;
+      render();
+    }
+  }
+
+  function applyUnderstood(result) {
+    const fields = result.fields || {};
+    const value = (name, fallback) => fields[name] && fields[name].value != null ? fields[name].value : fallback;
+    const draft = emptyDraft();
+    draft.brief = result.brief || result.text || "";
+    draft.style = value("style", "");
+    draft.servings = String(value("servings", ""));
+    draft.deliveryDate = value("deliveryDate", state.session && state.session.today ? addDays(state.session.today, 2) : "");
+    draft.budget = value("budget", "") ? String(value("budget", "")).replace(/\.00$/, "") : "";
+    draft.dietaryRequirements = value("dietaryRequirements", []);
+    draft.excludedAllergens = value("excludedAllergens", []);
+    draft.preference = value("preference", "balanced");
+    draft.dietaryConfirmed = false;
+    draft.autoCommit = true;
+    draft.items = value("items", []);
+    state.draft = draft;
+  }
+
+  function answerQuestion(field, value) {
+    const result = state.understood;
+    if (!result) return;
+    if (field === "servings") {
+      const input = document.getElementById("answer-servings");
+      const number = Number(input && input.value);
+      if (!Number.isInteger(number) || number < 1) return setError("Enter the number of guests.");
+      value = number;
+      state.draft.servings = String(number);
+    }
+    if (field === "style") state.draft.style = value;
+    result.fields[field] = { value, source: "said", evidence: "your answer" };
+    result.questions = (result.questions || []).filter((item) => item.field !== field);
+    state.error = "";
+    render();
+  }
+
+  function toggleMic() {
+    if (state.listening && state.recognizer) {
+      state.recognizer.stop();
+      return;
+    }
+    const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Recognition) {
+      state.notice = "Voice input needs Chrome or Edge. You can type the request instead.";
+      return render();
+    }
+    const recognizer = new Recognition();
+    recognizer.lang = navigator.language && navigator.language.startsWith("fi") ? "fi-FI" : "en-GB";
+    recognizer.interimResults = true;
+    recognizer.onresult = (event) => {
+      state.ask = Array.from(event.results).map((item) => item[0].transcript).join("");
+      const box = document.getElementById("ask");
+      if (box) box.value = state.ask;
+    };
+    recognizer.onerror = () => { state.notice = "I couldn't hear that. Try again or type it."; };
+    recognizer.onend = () => {
+      state.listening = false;
+      state.recognizer = null;
+      render();
+      if ((state.ask || "").trim()) interpretAsk();
+    };
+    state.listening = true;
+    state.recognizer = recognizer;
+    state.notice = "";
+    render();
+    recognizer.start();
   }
 
   function readPending() {
@@ -1131,8 +1521,11 @@ function scopeListKnown(session) {
     next.pantry = pantryRows(job);
     next.revisingFrom = job.id;
     next.dietaryConfirmed = false;
+    next.items = job.items || [];
     state.draft = next;
-    state.notice = job.dietaryRequirements || job.pantry ? "Review the copied fields. Dietary confirmation must be given again." : "Dietary constraints and pantry were not both present on the job. Confirm them again. Pantry amounts shown from a plan are previous calculation inputs, not a stock system.";
+    state.showForm = true;
+    state.understood = null;
+    state.notice = "Change what you need and submit again. Please confirm the diet again.";
     go("#requests");
   }
 
@@ -1154,6 +1547,26 @@ function scopeListKnown(session) {
     const action = button.dataset.action;
     if (action === "reload") return reload();
     if (action === "logout") return logout();
+    if (action === "mic") return toggleMic();
+    if (action === "example") {
+      state.ask = button.dataset.text;
+      return interpretAsk();
+    }
+    if (action === "show-form") {
+      state.showForm = true;
+      return render();
+    }
+    if (action === "hide-form") {
+      state.showForm = false;
+      return render();
+    }
+    if (action === "answer") return answerQuestion(button.dataset.field, button.dataset.value);
+    if (action === "find") return submitRequest();
+    if (action === "resolve" && state.job) {
+      startReveal(state.job, true);
+      state.reveal.resolving = true;
+      return mutate(`/workspace/jobs/${encodeURIComponent(state.job.id)}/resolve`, { exceptionId: button.dataset.exception, optionId: button.dataset.option });
+    }
     if (action === "fill-wedding") return fillWedding();
     if (action === "fill-milk") return fillMilk();
     if (action === "use-recipe") return useRecipe(button.dataset.id);
@@ -1203,9 +1616,46 @@ function scopeListKnown(session) {
     state.notice = "Ranking was copied into a new request. The previous approval will not apply.";
   }
 
+  async function approveAndPlace() {
+    const job = state.job;
+    const id = encodeURIComponent(job.id);
+    state.confirm = "";
+    state.error = "";
+    const steps = [];
+    const run = async (label, detail, call) => {
+      steps.push({ label, done: false });
+      state.placing = steps;
+      render();
+      const started = Date.now();
+      const result = await call();
+      await pace(600 - (Date.now() - started));
+      steps[steps.length - 1] = { label, detail };
+      render();
+      return result;
+    };
+    state.busy = "mutate";
+    try {
+      if (evaluationExpired(job, Date.now())) await run("Re-checked price & stock", "last check was over 2 min ago", () => request("POST", `/workspace/jobs/${id}/recheck`, {}));
+      await run("Approved", roleLabel(state.session.principalId), () => request("POST", `/workspace/jobs/${id}/decision`, { decision: "approve" }));
+      await run("Final price & stock check → order placed", "", () => request("POST", `/workspace/jobs/${id}/commit`, {}));
+      await pace(500);
+    } catch (error) {
+      if (error.status === 401) return unauthenticated();
+      state.error = error.message;
+    } finally {
+      state.placing = null;
+      state.busy = "";
+      await loadJobs();
+      await loadJob(job.id, true);
+      render();
+      schedulePoll();
+    }
+  }
+
   async function confirmAction() {
     if (!state.job) return;
     const id = state.job.id;
+    if (state.confirm === "approve") return approveAndPlace();
     if (state.confirm === "approve" || state.confirm === "reject") {
       const body = { decision: state.confirm === "approve" ? "approve" : "reject" };
       if (state.comment.trim()) body.comment = state.comment.trim();
@@ -1225,7 +1675,7 @@ function scopeListKnown(session) {
       storageSet(PENDING_KEY, "");
       state.busy = "";
       state.job = job;
-      go(`#job/${job.id}/plan`);
+      go(`#job/${job.id}/basket`);
     } catch (error) {
       state.busy = "";
       if (error.status === 401) return unauthenticated();
@@ -1270,11 +1720,26 @@ function scopeListKnown(session) {
         event.preventDefault();
         submitRequest();
       }
+      if (event.target.id === "ask-form") {
+        event.preventDefault();
+        interpretAsk();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.target.id === "ask" && event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        interpretAsk();
+      }
     });
     document.addEventListener("input", (event) => {
+      if (event.target.id === "ask") state.ask = event.target.value;
       if (event.target.closest("#request-form, #request-filter, #decision-comment, #rank-preference")) syncDraft();
     });
     document.addEventListener("change", (event) => {
+      if (event.target.dataset && event.target.dataset.bind) {
+        state.draft[event.target.dataset.bind] = event.target.checked;
+        render();
+      }
       if (event.target.closest("#request-form, #rank-preference")) {
         syncDraft();
         if (event.target.matches("select, input[type='checkbox']")) render();
@@ -1291,10 +1756,12 @@ function scopeListKnown(session) {
     window.addEventListener("hashchange", () => {
       state.route = parseRoute();
       state.confirm = "";
+      state.error = "";
       if (state.phase === "workspace") followRoute();
       else render();
     });
     document.addEventListener("visibilitychange", schedulePoll);
+    document.addEventListener("toggle", (event) => { if (event.target.classList && event.target.classList.contains("more-options")) state.moreOpen = event.target.open; }, true);
     boot();
   }
 
