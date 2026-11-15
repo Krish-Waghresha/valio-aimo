@@ -1,0 +1,151 @@
+{
+  "title": "Open to Agents - Business Pitch",
+  "duration": 118.0,
+  "maxSeconds": 119.0,
+  "fps": 60,
+  "width": 1920,
+  "height": 1080,
+  "timing": "fixed",
+  "model": "eleven_v4",
+  "voiceSettings": {
+    "stability": 0.5,
+    "similarity_boost": 0.75
+  },
+  "voices": {
+    "krish": {
+      "name": "Krish", "env": "ELEVENLABS_VOICE_ID",
+      "delivery": "[confident, upbeat business pitch, smiling voice]"
+    },
+    "jakub": {
+      "name": "Jakub", "env": "ELEVENLABS_VOICE_JAKUB",
+      "delivery": "[excited, confident, energetic presentation]"
+    }
+  },
+  "originalSha256": "b4b5f21d1795ba3e83c49ee77e37478ea31bf6a6b8e7b5208d2d8c506327716d",
+  "edit": {
+    "chapters": [
+      {"id": "milk", "number": "01", "title": "Milk", "lines": ["Shortage +", "human approval"], "start": 39, "end": 83},
+      {"id": "butter", "number": "02", "title": "Butter", "lines": ["Within its", "authority"], "start": 83, "end": 98},
+      {"id": "boundary", "number": "03", "title": "Boundary", "lines": ["Bypass +", "self-approval"], "start": 98, "end": 109}
+    ],
+    "zooms": [
+      {"id": "approval", "label": "Human approval", "start": 69, "end": 77.5, "scale": 1.6, "center": [0.765, 0.32], "ramp": 0.8},
+      {"id": "agent-decisions", "label": "Agent decisions", "start": 93.3, "end": 97.9, "scale": 1.7, "center": [0.38, 0.80], "ramp": 0.8}
+    ],
+    "musicDynamics": [
+      {"name": "Anticipation", "start": 0, "duration": 6.5, "gainDb": 1.5},
+      {"name": "Reveal breath", "start": 6.5, "duration": 0.5, "gainDb": -17.0},
+      {"name": "Open to agents", "start": 7, "duration": 4, "gainDb": 2.0},
+      {"name": "Architecture", "start": 11, "duration": 28, "gainDb": -1.0},
+      {"name": "Evidence", "start": 39, "duration": 59, "gainDb": -5.0},
+      {"name": "Boundary", "start": 98, "duration": 11, "gainDb": -3.0},
+      {"name": "Payoff", "start": 109, "duration": 9, "gainDb": 1.5}
+    ]
+  },
+  "segments": [
+    {
+      "id": "s01", "speaker": "krish", "targetSeconds": 7.0, "leadInSeconds": 2.0,
+      "text": "Twenty thousand kitchens. The next buyer is an agent.",
+      "visual": {"scene": "hook"}
+    },
+    {
+      "id": "s04", "speaker": "jakub", "targetSeconds": 4.0,
+      "text": "Open to agents. On Valio Aimo's terms!",
+      "visual": {"scene": "hero"}
+    },
+    {
+      "id": "s06", "speaker": "krish", "targetSeconds": 12.0,
+      "text": "We built two parts. The workspace turns a chef's need into a clear purchasing task. External purchasing agents can also connect directly.",
+      "visual": {"scene": "architecture", "part": 1}
+    },
+    {
+      "id": "s07", "speaker": "jakub", "targetSeconds": 16.0,
+      "text": "The Trusted Gateway exposes products, fixed prices and stock through an open API. It enforces spending limits, routes human approval, and records a mock order. Every decision is traceable.",
+      "visual": {"scene": "architecture", "part": 2}
+    },
+    {
+      "id": "s09", "speaker": "jakub", "targetSeconds": 7.5,
+      "text": "First: a thousand litres of lactose-free milk, by Monday. One clear purchasing request.",
+      "visual": {"rec": "A", "sourceStart": 0.0, "sourceEnd": 7.352},
+      "chapter": "milk", "caption": true
+    },
+    {
+      "id": "s10", "speaker": "jakub", "targetSeconds": 5.0,
+      "text": "It turns the request into clear requirements, with assumptions visible.",
+      "visual": {"rec": "A", "sourceStart": 7.352, "sourceEnd": 11.871},
+      "chapter": "milk", "caption": true
+    },
+    {
+      "id": "s11", "speaker": "krish", "targetSeconds": 4.5,
+      "text": "Then checks price and stock across eleven shortlisted products.",
+      "visual": {"rec": "A", "sourceStart": 11.871, "sourceEnd": 15.833},
+      "chapter": "milk", "caption": true
+    },
+    {
+      "id": "s12", "speaker": "krish", "targetSeconds": 12.0,
+      "text": "But only three hundred and eighty-four litres of the usual milk are available. The official substitute fills the order, for over six hundred euros less than a split basket.",
+      "visual": {"rec": "A", "sourceStart": 15.833, "sourceEnd": 26.436},
+      "chapter": "milk", "caption": true
+    },
+    {
+      "id": "s13", "speaker": "krish", "targetSeconds": 5.0,
+      "text": "Eleven hundred and fifty euros. Over its five-hundred-euro limit.",
+      "visual": {"rec": "A", "sourceStart": 26.436, "sourceEnd": 30.736},
+      "chapter": "milk", "caption": true
+    },
+    {
+      "id": "s14", "speaker": "jakub", "targetSeconds": 10.0,
+      "text": "The manager approves that exact basket. Price and stock are checked again, before a mock order is recorded. Every step is logged.",
+      "visual": {"rec": "B", "sourceStart": 0.0, "sourceEnd": 8.606},
+      "chapter": "milk", "caption": true
+    },
+    {
+      "id": "s15", "speaker": "krish", "targetSeconds": 5.0,
+      "text": "Second: twenty kilos of butter, for Friday. An everyday order.",
+      "visual": {"rec": "C", "sourceStart": 0.0, "sourceEnd": 4.798},
+      "chapter": "butter", "caption": true
+    },
+    {
+      "id": "s16", "speaker": "krish", "targetSeconds": 10.0,
+      "text": "Forty-two euros, thirty-seven cents. Within its authority, it orders automatically. The decision trail explains the price, delivery, and rejected alternatives.",
+      "visual": {"rec": "C", "sourceStart": 4.798, "sourceEnd": 10.478, "holdEndSeconds": 4.0},
+      "chapter": "butter", "caption": true
+    },
+    {
+      "id": "s17", "speaker": "jakub", "targetSeconds": 11.0,
+      "text": "Third: try bypassing approval. Refused. Try letting the agent approve itself. Refused again. These are gateway rules, not just prompts.",
+      "visual": {"scene": "terminal"},
+      "chapter": "boundary", "caption": true
+    },
+    {
+      "id": "s20", "speaker": "krish", "targetSeconds": 4.0,
+      "text": "Delegate the ordering. Keep control.",
+      "visual": {"scene": "end", "part": 1}
+    },
+    {
+      "id": "s21", "speaker": "jakub", "targetSeconds": 5.0,
+      "text": "Open to agents. On Valio Aimo's terms!",
+      "visual": {"scene": "end", "part": 2}
+    }
+  ],
+  "music": {
+    "model": "music_v1",
+    "positive_global_styles": [
+      "Instrumental premium technology product film, 118 seconds, elegant and confident",
+      "110 BPM, restrained cinematic electronic pulse, warm deep bass, tactile percussion, glassy synth details",
+      "Sparse midrange with generous space for two alternating narrators, no lead melody competing with voices",
+      "A continuous coherent score with intentional transitions, not separate songs"
+    ],
+    "negative_global_styles": [
+      "vocals", "lyrics", "choir", "spoken words", "aggressive trailer horns",
+      "constant risers", "glitch overload", "distorted bass", "busy melody"
+    ],
+    "sections": [
+      {"name": "Anticipation", "seconds": 14, "style": "Sparse warm sub pulse, tactile ticks, slowly opening luminous texture; one short breath before the reveal"},
+      {"name": "The gateway", "seconds": 25, "style": "A confident clean groove arrives; precise soft percussion, dimensional arpeggios, forward motion"},
+      {"name": "The evidence", "seconds": 50, "style": "Quieter rhythmic bed under the narration and UI demonstration, restrained bass, no distracting fills"},
+      {"name": "The boundary", "seconds": 16, "style": "Brief tension, a decisive muted impact, then controlled confident resolution"},
+      {"name": "Open to agents", "seconds": 13, "style": "Warm uplifting payoff, one elegant final chord around second 115, clean sustained tail and definite ending"}
+    ]
+  }
+}

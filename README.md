@@ -1,5 +1,7 @@
 # Valio Aimo Purchasing Workspace
 
+[Watch the latest demo](https://youtu.be/CB_NcgdgK5k).
+
 The working demo includes an Aimo-styled purchasing workspace, curated recipe
 and direct-product planning, candidate comparison, pantry/portion/pack calculations,
 exception recovery, authenticated human approvals, and persistent mock orders.

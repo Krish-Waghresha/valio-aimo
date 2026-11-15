@@ -297,6 +297,23 @@ def decide(item, family, candidates, checked, reliability, preference, delivery_
                            "options": options})
         return [], exceptions, actions, ranked
 
+    if usual and usual["reliability"] is not None and usual["reliability"] < RELIABILITY_FLOOR:
+        safer = next((candidate for candidate in ranked if candidate is not usual and (candidate["reliability"] or 0) >= Decimal("0.98")
+                      and (candidate["stockAmount"] is None or candidate["stockAmount"] >= needed)), None)
+        if safer:
+            usual_lines, usual_total = describe([{"candidate": usual, "quantity": _units_for(needed, usual["packAmount"])}])
+            safer_lines, safer_total = describe([{"candidate": safer, "quantity": _units_for(needed, safer["packAmount"])}])
+            difference = safer_total - usual_total
+            exceptions.append({"id": f"{family}-reliability", "kind": "delivery_risk", "severity": "decide",
+                               "title": f"Your usual {short(usual)} was delivered in full only {int(usual['reliability'] * 100)} % of the time",
+                               "detail": f"For {day(delivery_date)} the agent suggests {short(safer)}: {int(safer['reliability'] * 100)} % delivered in full, same {unit_label} quantity.",
+                               "options": [
+                                   {"id": "switch", "primary": True, "lines": safer_lines, "totalGross": str(safer_total),
+                                    "label": f"Switch to {short(safer)}", "effect": _money(safer_total) + (f" · +{_money(difference)}" if difference > 0 else f" · saves {_money(-difference)}" if difference < 0 else "")},
+                                   {"id": "keep", "primary": False, "lines": usual_lines, "totalGross": str(usual_total),
+                                    "label": f"Keep {short(usual)}", "effect": _money(usual_total) + " · delivery risk"}]})
+            return [], exceptions, actions, ranked
+
     allocation, short_amount = fill(primary, ranked)
     lines, total = describe(allocation)
     if short_amount > 0:

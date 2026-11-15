@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Open to Agents - cinematic renderer</title>
+<style>
+  @font-face { font-family: "Barlow Condensed"; src: url("../../src/aimo_gateway/static/fonts/barlow-condensed-700.woff2") format("woff2"); font-weight: 700; }
+  @font-face { font-family: "DM Sans"; src: url("../../src/aimo_gateway/static/fonts/dm-sans-400.woff2") format("woff2"); font-weight: 400; }
+  @font-face { font-family: "DM Sans"; src: url("../../src/aimo_gateway/static/fonts/dm-sans-700.woff2") format("woff2"); font-weight: 700; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #020b0e; }
+  canvas { display: block; width: 1920px; height: 1080px; }
+</style>
+</head>
+<body>
+<canvas id="film" width="1920" height="1080" aria-label="Open to Agents cinematic film"></canvas>
+<script src="motion.js"></script>
+<script>
+  const canvas = document.getElementById("film");
+  const ctx = canvas.getContext("2d", {alpha: false});
+  const WIDTH = 1920, HEIGHT = 1080, SOURCE_FPS = 30;
+  const C = {ink: "#020b0e", lime: "#c0e021", teal: "#005670", muted: "#a8c6d0"};
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const ease = (x) => { x = clamp(x); return x * x * x * (x * (x * 6 - 15) + 10); };
+  const lerp = (a, b, p) => a + (b - a) * p;
+  const imageCache = new Map();
+  let film;
+
+  function recordingPosition(segment, localTime) {
+    const visual = segment.visual;
+    const playSeconds = segment.duration - (visual.holdEndSeconds || 0);
+    if (playSeconds <= 0) throw new Error(`No playback time in ${segment.id}`);
+    const p = clamp(localTime / playSeconds);
+    const sourceTime = lerp(visual.sourceStart, visual.sourceEnd, p);
+    return {
+      recording: visual.rec, sourceTime, sourceFrame: Math.floor(sourceTime * SOURCE_FPS),
+      readingHold: localTime >= playSeconds,
+    };
+  }
+
+  async function recordingFrame(segment, localTime) {
+    const visual = segment.visual;
+    const frame = recordingPosition(segment, localTime).sourceFrame;
+    const url = `../build/rec/${visual.rec}/${String(frame).padStart(5, "0")}.jpg`;
+    if (imageCache.has(url)) {
+      const existing = imageCache.get(url);
+      imageCache.delete(url);
+      imageCache.set(url, existing);
+      return existing;
+    }
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    if (!image.naturalWidth || !image.naturalHeight) throw new Error(`Empty recording frame: ${url}`);
+    imageCache.set(url, image);
+    while (imageCache.size > 16) imageCache.delete(imageCache.keys().next().value);
+    return image;
+  }
+
+  function roundRect(context, x, y, w, h, r) {
+    context.beginPath();
+    context.roundRect(x, y, w, h, r);
+  }
+
+  function text(str, x, y, size, color = "#fff", font = "DM Sans", weight = 400, align = "left") {
+    ctx.font = `${weight} ${size}px "${font}"`;
+    ctx.textAlign = align;
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = color;
+    ctx.fillText(str, x, y);
+  }
+
+  function cameraState(time) {
+    const zoom = film.edit.zooms.find(item => time >= item.start && time < item.end);
+    if (!zoom) return {id: null, scale: 1, amount: 0, center: [.5, .5]};
+    const amount = Math.min(ease((time - zoom.start) / zoom.ramp), ease((zoom.end - time) / zoom.ramp));
+    return {
+      id: zoom.id, label: zoom.label, scale: lerp(1, zoom.scale, amount), amount,
+      center: [lerp(.5, zoom.center[0], amount), lerp(.5, zoom.center[1], amount)],
+    };
+  }
+
+  function cameraCrop(camera, image) {
+    const w = image.naturalWidth / camera.scale, h = image.naturalHeight / camera.scale;
+    const x = clamp(camera.center[0] * image.naturalWidth - w / 2, 0, image.naturalWidth - w);
+    const y = clamp(camera.center[1] * image.naturalHeight - h / 2, 0, image.naturalHeight - h);
+    return [x, y, w, h];
+  }
+
+  function drawEvidence(image, segment, localTime) {
+    const camera = cameraState(segment.start + localTime);
+    const crop = cameraCrop(camera, image);
+    ctx.save();
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, ...crop, 0, 0, WIDTH, HEIGHT);
+    ctx.restore();
+    return {...recordingPosition(segment, localTime), camera: {...camera, crop}};
+  }
+
+  function chapter(segment, localTime) {
+    if (!segment.chapter) return;
+    const item = film.edit.chapters.find(item => item.id === segment.chapter);
+    if (!item) throw new Error(`Missing chapter: ${segment.chapter}`);
+    const camera = cameraState(segment.start + localTime);
+    const arrival = ease((segment.start + localTime - item.start) / .4);
+    const dark = !segment.visual.rec;
+    const ink = dark ? "#edf5f5" : C.teal;
+    ctx.save();
+    ctx.globalAlpha *= arrival * (1 - ease(camera.amount / .16));
+    roundRect(ctx, 18, 204, 175, 280, 12);
+    ctx.fillStyle = dark ? "#0b232b" : "#eef5f2"; ctx.fill();
+    text("SCENARIO", 33, 235, 14, ink, "DM Sans", 700);
+    text(`${item.number} / 03`, 33, 279, 25, ink, "DM Sans", 700);
+    text(item.title, 32, 341, 44, ink, "Barlow Condensed", 700);
+    item.lines.forEach((line, index) => text(line, 33, 382 + index * 28, 18, ink));
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i === Number(item.number) - 1 ? (dark ? C.lime : C.teal) : (dark ? "#294a55" : "#c5d7d5");
+      roundRect(ctx, 33 + i * 47, 448, 35, 4, 2); ctx.fill();
+    }
+    ctx.restore();
+    if (camera.id) {
+      ctx.save();
+      ctx.globalAlpha *= arrival * ease((camera.amount - .12) / .15);
+      roundRect(ctx, 24, 22, 350, 50, 10);
+      ctx.fillStyle = "#020b0eee"; ctx.fill();
+      text(`${item.number}/03  ·  ${camera.label.toUpperCase()}`, 41, 54, 18, "#fff", "DM Sans", 700);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha *= arrival;
+    text("RECORDED SYNTHETIC SERVICES / LOCAL MOCK ORDERS / NO PAYMENTS", 1860, 1060, 13, C.muted, "DM Sans", 700, "right");
+    ctx.restore();
+  }
+
+  function subtitle(segment, localTime) {
+    if (!segment.caption) return;
+    const phrase = segment.captions.find(c => localTime >= c.start && localTime < c.end);
+    const gradient = ctx.createLinearGradient(0, 926, 0, 1080);
+    gradient.addColorStop(0, "#020b0e00"); gradient.addColorStop(.7, "#020b0eef");
+    ctx.fillStyle = gradient; ctx.fillRect(0, 926, WIDTH, 154);
+    if (!phrase) return;
+    text(segment.speaker.toUpperCase(), 120, 999, 21, C.lime, "DM Sans", 700);
+    ctx.font = '700 42px "DM Sans"';
+    const words = phrase.text.split(" ");
+    const lines = [""];
+    for (const word of words) {
+      const line = lines[lines.length - 1];
+      const next = line ? `${line} ${word}` : word;
+      if (ctx.measureText(next).width > 1450 && line) lines.push(word);
+      else lines[lines.length - 1] = next;
+    }
+    if (lines.length > 2) throw new Error(`Caption exceeds two lines in ${segment.id}`);
+    const baseline = lines.length > 1 ? 978 : 1001;
+    for (let i = 0; i < lines.length; i++) text(lines[i], 1055, baseline + i * 49, 42, "#fff", "DM Sans", 700, "center");
+  }
+
+  async function drawSegment(segment, localTime, alpha) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    let evidence;
+    if (segment.visual.rec) evidence = drawEvidence(await recordingFrame(segment, localTime), segment, localTime);
+    else window.CinematicMotion.scene(ctx, segment, localTime, film);
+    ctx.restore();
+    return evidence;
+  }
+
+  window.loadFilm = async (value) => {
+    film = value;
+    if (!film.segments?.length || !Number.isFinite(film.duration)) throw new Error("Invalid film timeline");
+    if (!Array.isArray(film.edit?.zooms) || !Array.isArray(film.edit?.chapters)) throw new Error("Missing fixed editorial plan");
+    if (!window.CinematicMotion?.scene || !window.CinematicMotion?.background) throw new Error("Motion renderer is missing");
+    await Promise.all([
+      document.fonts.load('700 80px "Barlow Condensed"'),
+      document.fonts.load('400 32px "DM Sans"'),
+      document.fonts.load('700 42px "DM Sans"'),
+    ]);
+    await document.fonts.ready;
+    return true;
+  };
+
+  window.renderFrame = async (time) => {
+    if (!film || !Number.isFinite(time) || time < 0 || time >= film.duration) throw new Error("Frame time outside the film");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = C.ink; ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    window.CinematicMotion.background(ctx, time);
+    let index = film.segments.findLastIndex(s => time >= s.start);
+    if (index < 0) index = 0;
+    const segment = film.segments[index];
+    const local = time - segment.start;
+    const previous = film.segments[index - 1];
+    const continuous = previous && (
+      (segment.visual.rec && previous.visual.rec && segment.chapter === previous.chapter) ||
+      (segment.visual.scene && segment.visual.scene === previous.visual.scene)
+    );
+    const blend = previous && !continuous ? ease(local / .4) : 1;
+    if (previous && blend < 1) await drawSegment(previous, Math.max(0, previous.duration - 1 / film.fps), 1 - blend);
+    const evidence = await drawSegment(segment, local, blend);
+    subtitle(segment, local);
+    chapter(segment, local);
+    const fadeIn = ease(time / .35), fadeOut = ease((film.duration - time) / .45);
+    ctx.fillStyle = `rgba(2,11,14,${1 - Math.min(fadeIn, fadeOut)})`;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    return {segment: segment.id, time, ...(evidence || {})};
+  };
+</script>
+</body>
+</html>
