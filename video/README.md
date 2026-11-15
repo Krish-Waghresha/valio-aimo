@@ -26,11 +26,16 @@ The voice-only commands require the exact original movie, original `config.json`
 Run them in the original production checkout, or restore matching original sources
 and retained media into a separate worktree. They are not a clean-clone build.
 
+The [frozen original-film production snapshot](https://github.com/Krish-Waghresha/valio-aimo/tree/0387355c9f8c173ff40c8cd4403e97022f6488cb)
+preserves the matching script, both revoice tools, presentation assets and production
+notes. It is a historical production checkout, not the current application release.
+Generated video/audio caches and credentials still need to be restored separately.
+
 The cleaned-up `main` version of `video/config.json` contains later wording corrections
 about scoped access and mock orders. Those corrections are not spoken in the locked
 original film. The revoice tools deliberately reject a script/cache mismatch rather
 than silently change its dialogue. Do not overwrite the corrected source on `main`
-to recreate a historical cut. Original production sources remain on the archive branch.
+to recreate a historical cut; use the frozen snapshot above.
 
 Use an ignored, mode-600 `.env.cinematic` with `ELEVENLABS_API_KEY`,
 `ELEVENLABS_VOICE_ID` (Krish) and `ELEVENLABS_VOICE_JAKUB` (Jakub):
