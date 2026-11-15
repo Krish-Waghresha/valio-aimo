@@ -540,17 +540,121 @@
     });
   }
 
+  function wipeText(ctx, value, x, y, size, color, amount, maxWidth, exit = 0) {
+    if (amount <= 0 || exit >= 1) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x - 8, y - size, maxWidth + 16, size * 1.25);
+    ctx.clip();
+    ctx.globalAlpha *= Math.min(1, amount * 2) * (1 - exit);
+    ctx.translate(0, (1 - amount) * size * 0.78 - exit * 30);
+    text(ctx, value, x, y, size, color, { maxWidth });
+    ctx.restore();
+  }
+
+  function kitchenNumber(ctx, t, morph) {
+    const value = "20,000+";
+    const x = 125;
+    const y = lerp(602, 234, morph);
+    let size = lerp(516, 86, morph);
+    ctx.save();
+    ctx.font = `700 ${size}px ${DISPLAY}`;
+    let widths = Array.from(value, (letter) => ctx.measureText(letter).width);
+    const total = widths.reduce((sum, width) => sum + width, 0);
+    if (total > 1640) {
+      size *= 1640 / total;
+      ctx.font = `700 ${size}px ${DISPLAY}`;
+      widths = Array.from(value, (letter) => ctx.measureText(letter).width);
+    }
+    let cursor = x;
+    Array.from(value).forEach((letter, i) => {
+      const entered = at(t, 0.025 + i * 0.025, 0.53);
+      if (entered > 0) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(cursor - 5, y - size, widths[i] + 10, size * 1.2);
+        ctx.clip();
+        ctx.translate(cursor + widths[i] / 2, y + (1 - entered) * size * 0.95);
+        const scale = 1 + (1 - entered) * 0.13;
+        ctx.scale(scale, scale);
+        ctx.fillStyle = letter === "+" ? C.lime : C.paper;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(letter, 0, 0);
+        ctx.restore();
+      }
+      cursor += widths[i];
+    });
+    ctx.restore();
+  }
+
+  function pitchFrame(ctx, amount, bottom = 747) {
+    const p = clamp(amount);
+    const right = 1775;
+    const top = lerp(bottom - 28, 276, p);
+    ctx.save();
+    const edge = ctx.createLinearGradient(136, bottom, right, 276);
+    edge.addColorStop(0, rgba(C.lime, 0.95));
+    edge.addColorStop(0.7, rgba(C.lime, 0.62));
+    edge.addColorStop(1, rgba(C.paper, 0.75));
+    line(ctx, [[136, bottom], [right - 28, bottom], [right, bottom - 28], [right, top]], edge, 4);
+    polygon(ctx, [[right + 7, bottom - 32], [right + 17, bottom - 42], [right + 17, top + 7], [right + 7, top - 3]]);
+    ctx.fillStyle = rgba(C.teal, 0.55 * p);
+    ctx.fill();
+    alpha(ctx, at(p, 0.78, 0.22), () => {
+      line(ctx, [[right, 276], [right - 28, 248], [right - 116, 248]], rgba(C.lime, 0.62), 4);
+    });
+    ctx.restore();
+  }
+
+  function connection(ctx, points, activity = 0, color = C.lime, twoWay = false) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(...points[0]);
+    ctx.bezierCurveTo(...points[1], ...points[2], ...points[3]);
+    ctx.lineWidth = 2.6;
+    ctx.strokeStyle = rgba(C.muted, 0.47);
+    ctx.stroke();
+    if (activity > 0) {
+      ctx.strokeStyle = rgba(color, activity * 0.86);
+      ctx.stroke();
+    }
+    const head = (a, b) => {
+      const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      const length = 10;
+      line(ctx, [
+        [b[0] - Math.cos(angle - 0.48) * length, b[1] - Math.sin(angle - 0.48) * length],
+        b,
+        [b[0] - Math.cos(angle + 0.48) * length, b[1] - Math.sin(angle + 0.48) * length],
+      ], activity > 0.3 ? color : C.muted, 2.6);
+    };
+    head(points[2], points[3]);
+    if (twoWay) head(points[1], points[0]);
+    ctx.restore();
+  }
+
+  function routePacket(ctx, points, t, start, length, color = C.lime) {
+    const p = at(t, start, length);
+    if (p <= 0 || p >= 1) return;
+    const position = cubic(points, p);
+    token(ctx, position[0], position[1], 30, {
+      color, roll: 0, yaw: 0, pitch: 0,
+      alpha: at(p, 0, 0.1) * (1 - at(p, 0.9, 0.1)),
+    });
+  }
+
   function background(ctx, time) {
     const t = Math.min(Math.max(0, Number(time) || 0), 114);
+    const lift = 1 - at(t, 9.5, 1.5) + at(t, 109, 0.8);
     ctx.save();
     const base = ctx.createLinearGradient(0, 0, 1600, H);
     base.addColorStop(0, C.ink);
-    base.addColorStop(0.58, "#04161c");
-    base.addColorStop(1, "#020d11");
+    base.addColorStop(0.58, "#062b36");
+    base.addColorStop(1, "#03171e");
     ctx.fillStyle = base;
     ctx.fillRect(0, 0, W, H);
-    glow(ctx, 1270 + Math.sin(t * 0.075) * 65, 365, 970, 610, C.teal, 0.28);
-    glow(ctx, 1470, 754, 610, 220, C.lime, 0.035);
+    glow(ctx, 1270, 365, 970, 610, C.teal, 0.28 + lift * 0.25);
+    glow(ctx, 1470, 754, 610, 220, C.lime, 0.035 + lift * 0.025);
     glow(ctx, 550, 930, 870, 180, C.teal, 0.1);
     const horizon = ctx.createLinearGradient(0, 0, W, 0);
     horizon.addColorStop(0, rgba(C.teal, 0));
@@ -559,7 +663,7 @@
     line(ctx, [[0, 869], [1920, 869]], horizon, 1);
     const vignette = ctx.createRadialGradient(960, 420, 310, 960, 480, 1140);
     vignette.addColorStop(0, rgba(C.ink, 0));
-    vignette.addColorStop(1, rgba(C.ink, 0.5));
+    vignette.addColorStop(1, rgba(C.ink, 0.35));
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
@@ -567,24 +671,26 @@
 
   function hook(ctx, s, t) {
     const d = duration(s);
-    const push = at(t, 0, d);
-    camera(ctx, { x: lerp(960, 985, push), y: 540, zoom: lerp(1, 1.035, push) }, () => {
-      glow(ctx, 1385, 450, 450, 520, C.teal, 0.27);
-      gate(ctx, { x: 1430, y: 485, w: 420, h: 546, yaw: -0.28, pitch: 0.1, roll: -0.025, light: 0.72, sweep: at(t, 0.45, 2.3) });
-      const path = [[1060, 845], [1075, 665], [1270, 692], [1330, 548]];
-      const travel = lerp(0.22, 0.88, at(t, 0.15, d - 0.35));
-      route(ctx, path, travel, C.lime, 2.5);
-      const pos = cubic(path, travel);
-      token(ctx, pos[0], pos[1], lerp(187, 159, push), { yaw: lerp(-0.38, -0.12, push), roll: lerp(-0.15, -0.05, push) });
+    const lead = Number(s.leadInSeconds) || 2;
+    const buyerAt = clamp(cue(s, "The next buyer", 0.56), lead + 0.75, d - 1.7);
+    const morph = at(t, buyerAt - 0.12, 0.66);
+    const agentAt = Math.min(Math.max(cue(s, "agent", 0.76) - 0.06, buyerAt + 0.67), d - 1);
+    const numberIn = at(t, 0.06, 0.52);
+    alpha(ctx, numberIn, () => label(ctx, "VALIO AIMO / FOODSERVICE", 134, 150, C.muted, 20, 2.2));
+    alpha(ctx, at(t, 0.09, 0.45), () => {
+      mark(ctx, 1718, 159, 67, C.lime);
+      pitchFrame(ctx, morph, 846);
     });
-    reveal(ctx, at(t, 0, 0.42), () => label(ctx, "VALIO AIMO  /  A NEW BUYING INTERFACE", 130, 174));
-    reveal(ctx, at(t, cue(s, "Who", 0.01), 0.5), () => text(ctx, "Who places", 124, 359, 156));
-    reveal(ctx, at(t, cue(s, "your next", 0.23) - 0.08, 0.48), () => text(ctx, "your next", 124, 510, 156));
-    reveal(ctx, at(t, cue(s, "wholesale order", 0.51) - 0.09, 0.52), () => text(ctx, "wholesale order?", 124, 660, 143, C.lime, { maxWidth: 920 }));
-    alpha(ctx, at(t, 0.55, 0.8), () => {
-      line(ctx, [[131, 767], [181, 767]], C.lime, 3);
-      label(ctx, "THE REQUEST IS ALREADY ON ITS WAY.", 203, 774, C.muted, 18, 1.6);
-    });
+    // The figure settles in the music-only lead-in. Word cues already include it.
+    kitchenNumber(ctx, t, morph);
+    reveal(ctx, at(t, 0.49, 0.34), () => {
+      text(ctx, "professional kitchens", 134, lerp(718, 282, morph), lerp(72, 27, morph), C.muted, { body: true, maxWidth: 1570 });
+    }, 15, 0);
+    wipeText(ctx, "The next buyer", 128, 481, 119, C.paper, at(t, buyerAt + 0.34, 0.35), 1570);
+    wipeText(ctx, "AN AGENT.", 123, 702, 230, C.lime, at(t, agentAt, 0.4), 1570);
+    reveal(ctx, at(t, Math.min(agentAt + 0.53, d - 0.9), 0.27), () => {
+      text(ctx, "Your business. Your terms.", 137, 810, 31, C.paper, { body: true });
+    }, 10, 0);
   }
 
   function history(ctx, s, t) {
@@ -657,32 +763,16 @@
   }
 
   function hero(ctx, s, t) {
-    const d = duration(s);
-    const opening = at(t, cue(s, "open", 0.17) - 0.05, 0.68);
-    const terms = at(t, cue(s, "On Valio", 0.52) - 0.08, 0.72);
-    const push = at(t, 0, d - 0.2);
-    camera(ctx, { x: lerp(960, 974, push), y: 540, zoom: lerp(1, 1.025, push) }, () => {
-      glow(ctx, 1460, 458, 560, 495, C.teal, 0.36);
-      const path = [[1130, 799], [1220, 755], [1338, 553], [1480, 468]];
-      const travel = lerp(0.5, 0.99, at(t, 0.1, d - 0.45));
-      route(ctx, path, travel, C.lime, 2.3);
-      if (travel > 0.89) {
-        const pos = cubic(path, travel);
-        token(ctx, pos[0], pos[1], lerp(148, 116, terms), { alpha: 1 - terms * 0.15, yaw: -0.24, roll: -0.035 });
-      }
-      gate(ctx, { x: 1482, y: 483, w: 380, h: 514, yaw: -0.29, pitch: 0.1, roll: -0.025, light: lerp(0.5, 1, terms), sweep: at(t, 0.32, 2.7) });
-      if (travel <= 0.89) {
-        const pos = cubic(path, travel);
-        token(ctx, pos[0], pos[1], lerp(148, 116, terms), { yaw: -0.24, roll: -0.035 });
-      }
-    });
-    reveal(ctx, at(t, 0, 0.45), () => label(ctx, "OUR ANSWER", 133, 181));
-    reveal(ctx, opening, () => text(ctx, "Open to agents.", 123, 392, 162, C.paper, { maxWidth: 1130 }));
-    reveal(ctx, terms, () => text(ctx, "On Valio Aimo’s terms.", 126, 577, 119, C.lime, { maxWidth: 1130 }));
-    alpha(ctx, terms, () => {
-      line(ctx, [[134, 704], [205, 704]], C.lime, 3);
-      text(ctx, "The interface opens. The owner stays in control.", 232, 716, 27, C.muted, { body: true, maxWidth: 900 });
-    });
+    const opening = at(t, cue(s, "Open", 0.025), 0.47);
+    const terms = at(t, cue(s, "On Valio", 0.44) - 0.04, 0.47);
+    pitchFrame(ctx, 1);
+    mark(ctx, 1718, 159, 67, C.lime);
+    label(ctx, "VALIO AIMO", 138, 178, C.paper, 25, 3.6);
+    wipeText(ctx, "Open to agents.", 129, 427, 183, C.paper, opening, 1582);
+    wipeText(ctx, "On Valio Aimo’s terms.", 132, 623, 166, C.lime, terms, 1580);
+    reveal(ctx, terms, () => {
+      text(ctx, "A new buying interface. The owner stays in control.", 140, 824, 30, C.muted, { body: true, maxWidth: 1570 });
+    }, 9, 0);
   }
 
   function title(ctx, s, t) {
@@ -713,184 +803,125 @@
     reveal(ctx, one, () => text(ctx, "Two parts. One controlled path.", 960, 852, 43, C.paper, { align: "center" }), 12, 1.5);
   }
 
-  function architecture(ctx, s, t) {
+  function architecture(ctx, s, t, film) {
     const second = Number(s.visual && s.visual.part) === 2;
-    const d = duration(s);
-    const focus = second ? at(t, 0.05, 1.35) : 0;
-    const entry = second ? 1 : at(t, 0, 0.85);
-    const source = { x: lerp(348, 591, focus), y: lerp(494, 485, focus), w: lerp(379, 860, focus), h: lerp(260, 456, focus), yaw: lerp(-0.19, -0.035, focus), pitch: lerp(0.08, 0.025, focus) };
-    const gateway = { x: lerp(984, 1435, focus), y: lerp(486, 449, focus), w: lerp(576, 535, focus), h: lerp(378, 361, focus), yaw: lerp(-0.045, 0.075, focus), pitch: 0.035 };
-    const api = { x: lerp(1586, 1516, focus), y: lerp(492, 757, focus), w: lerp(337, 369, focus), h: lerp(264, 142, focus), yaw: lerp(0.15, 0.06, focus), pitch: 0.065 };
-    const human = { x: lerp(991, 1080, focus), y: lerp(791, 786, focus), w: lerp(346, 329, focus), h: lerp(118, 118, focus), yaw: -0.025, pitch: 0.025 };
-    const sourcePath = [[source.x + source.w * 0.39, source.y + 11], [source.x + source.w * 0.58, source.y + 11], [gateway.x - gateway.w * 0.63, gateway.y + 11], [gateway.x - gateway.w * 0.38, gateway.y + 11]];
-    const apiPath = [[gateway.x + gateway.w * 0.43, gateway.y + 13], [gateway.x + gateway.w * 0.75, gateway.y + 13], [api.x, api.y - api.h * 0.7], [api.x, api.y - api.h * 0.35]];
-    const humanPath = [[gateway.x - 12, gateway.y + gateway.h * 0.4], [gateway.x - 12, 708], [human.x, 711], [human.x, human.y - 45]];
-    const times = [
-      cue(s, "find products", 0.29) - 0.12,
-      cue(s, "price and stock", 0.39) - 0.12,
-      cue(s, "enforce limits", 0.52) - 0.12,
-      cue(s, "approve", 0.63) - 0.12,
-      cue(s, "mock order", 0.77) - 0.18,
-      cue(s, "Every step", 0.9) - 0.13,
-    ];
-    const gatewayTime = second ? d + 1 : t;
-    const credentials = second ? 1 : at(t, cue(s, "credentialed agents", 0.22) - 0.5, 0.68);
-    const find = second ? at(t, cue(s, "sources products", 0.43) - 0.16, 0.65) : at(t, times[0], 0.62);
-    const check = second ? 1 : at(t, times[1], 0.7);
-    const approval = second ? at(t, cue(s, "human", 0.79) - 0.18, 0.65) : at(t, times[3], 0.7);
-    const record = second ? 1 : at(t, times[4], 0.65);
-    const logged = second ? 1 : at(t, times[5], 0.6);
-    const headingChange = second ? at(t, 0.12, 0.55) : 0;
-    const headingIn = second ? 1 : at(t, 0, 0.55);
-    const labelOut = 1 - ease(focus / 0.45);
-    const labelIn = ease((focus - 0.45) / 0.55);
+    const first = second
+      ? (film.segments || []).find((item) => item.visual && item.visual.scene === "architecture" && Number(item.visual.part) === 1) || { targetSeconds: 12 }
+      : s;
+    const firstTime = second ? duration(first) + t : t;
+    const entry = second ? 1 : at(t, 0, 0.55);
+    const needAt = cue(first, "chef's need", 0.31);
+    const taskAt = cue(first, "purchasing task", 0.54);
+    const externalAt = cue(first, "External purchasing agents", 0.71);
+    const need = at(firstTime, needAt - 0.12, 0.65);
+    const task = at(firstTime, taskAt - 0.12, 0.65);
+    const external = at(firstTime, externalAt - 0.12, 0.65);
+    const focus = second ? at(t, 0.04, 0.7) : 0;
+    const workspaceFocus = (0.55 + 0.45 * at(firstTime, cue(first, "workspace", 0.2), 0.6)) * (1 - focus * 0.6);
+    const gatewayFocus = 0.32 + focus * 0.68;
+    const products = second ? at(t, cue(s, "products", 0.16) - 0.1, 0.55) : 0;
+    const prices = second ? at(t, cue(s, "fixed prices", 0.25) - 0.1, 0.55) : 0;
+    const stock = second ? at(t, cue(s, "stock", 0.32) - 0.1, 0.55) : 0;
+    const open = second ? at(t, cue(s, "open API", 0.41) - 0.12, 0.55) : 0;
+    const limits = second ? at(t, cue(s, "spending limits", 0.54) - 0.12, 0.6) : 0;
+    const approvalAt = second ? cue(s, "human approval", 0.66) - 0.12 : Infinity;
+    const recordAt = second ? cue(s, "mock order", 0.8) - 0.12 : Infinity;
+    const approval = second ? at(t, approvalAt, 0.6) : 0;
+    const record = second ? at(t, recordAt, 0.65) : 0;
+    const audit = second ? at(t, cue(s, "Every decision", 0.88) - 0.12, 0.65) : 0;
+    const workspacePath = [[630, 499], [669, 499], [700, 499], [740, 499]];
+    const externalPath = [[630, 811], [710, 811], [660, 573], [740, 573]];
+    const dataPath = [[1330, 484], [1367, 484], [1401, 484], [1440, 484]];
+    const humanPath = [[1025, 666], [1025, 694], [1025, 717], [1025, 745]];
+    const localPath = [[1256, 666], [1290, 733], [1539, 700], [1570, 745]];
 
-    alpha(ctx, headingIn, () => {
-      alpha(ctx, 1 - ease(headingChange / 0.45), () => {
-        label(ctx, "01 / TRUSTED GATEWAY", 131, 157, C.lime, 16);
-        text(ctx, "One controlled path.", 125, 244, 101, C.paper);
-      });
-      alpha(ctx, ease((headingChange - 0.45) / 0.55), () => {
-        label(ctx, "02 / AGENT WORKSPACE", 131, 157, C.lime, 16);
-        text(ctx, "From a need to a decision.", 125, 244, 97, C.paper, { maxWidth: 1620 });
-      });
-    });
+    // All six nodes keep their coordinates and readable labels for both parts.
+    alpha(ctx, entry, () => {
+      label(ctx, "OUR TWO COMPONENTS", 134, 151, C.lime, 18, 2);
+      text(ctx, "Two parts. One buying flow.", 126, 245, 97, C.paper, { maxWidth: 1640 });
+      connection(ctx, workspacePath, task * (1 - focus * 0.55));
+      connection(ctx, externalPath, external * (1 - focus * 0.55));
+      connection(ctx, dataPath, products, C.lime, true);
+      connection(ctx, humanPath, approval, C.amber, true);
+      connection(ctx, localPath, record);
+      text(ctx, "DATA", 1356, 460, 17, C.muted, { body: true, bold: true });
+      text(ctx, "When needed", 1048, 714, 19, C.muted, { body: true });
 
-    camera(ctx, { x: lerp(985, 960, entry), y: lerp(544, 540, entry), zoom: lerp(1.035, 1, entry) }, () => {
-      glow(ctx, gateway.x, gateway.y, 400, 310, C.teal, 0.17);
-      route(ctx, sourcePath, credentials, C.lime);
-      route(ctx, apiPath, check, C.lime);
-      route(ctx, humanPath, approval, C.amber, 2);
-
-      panel(ctx, { ...api, alpha: lerp(0.35 + check * 0.65, 0.78, focus), depth: 13, accent: C.teal }, (w, h) => {
-        alpha(ctx, labelOut, () => {
-          label(ctx, "CHALLENGE APIs", 27, 38, C.muted, 15, 1.7);
-          text(ctx, "Valio Aimo", 25, 101, 54, C.paper, { maxWidth: w - 50 });
-          line(ctx, [[27, 123], [w - 27, 123]], rgba(C.muted, 0.2), 1);
-          text(ctx, "Product catalog", 28, 167, 23, C.muted, { body: true });
-          text(ctx, "Fixed price / stock", 28, 207, 23, C.paper, { body: true, maxWidth: w - 56 });
-        });
-        alpha(ctx, labelIn, () => {
-          text(ctx, "Valio Aimo challenge APIs", 24, 53, 34, C.paper, { maxWidth: w - 48 });
-          text(ctx, "Fixed price / stock", 26, 96, 22, C.muted, { body: true });
-        });
+      panel(ctx, { x: 380, y: 483, w: 500, h: 366, light: true, depth: 14, accent: C.lime }, (w) => {
+        alpha(ctx, workspaceFocus, () => line(ctx, [[27, 3], [w - 27, 3]], C.teal, 4));
+        label(ctx, "01 / OUR WORKSPACE", 31, 40, C.teal, 17, 1.5);
+        text(ctx, "Agent workspace", 28, 110, 68, C.ink, { maxWidth: w - 58 });
+        line(ctx, [[31, 135], [w - 31, 135]], rgba(C.teal, 0.2), 1);
+        text(ctx, "A chef’s need", 33, 191, 32, C.ink, { body: true });
+        line(ctx, [[34, 206], [34 + 236 * need, 206]], rgba(C.teal, 0.56), 2);
+        connection(ctx, [[52, 221], [52, 229], [52, 238], [52, 247]], task, C.teal);
+        mark(ctx, 52, 280, 31, C.teal);
+        text(ctx, "Purchasing task", 83, 289, 51, C.ink, { maxWidth: w - 112 });
+        text(ctx, "Products · quantity · delivery", 34, 334, 23, C.teal, { body: true, maxWidth: w - 67 });
       });
 
-      panel(ctx, { ...human, alpha: second ? lerp(1, 0.5 + approval * 0.5, focus) : 0.25 + approval * 0.75, accent: C.amber, depth: 11 }, (w) => {
-        icon(ctx, "human", 42, 56, 45, C.amber);
-        text(ctx, "Kitchen manager", 80, 51, 35, C.paper, { maxWidth: w - 101 });
-        text(ctx, "When approval is needed", 81, 82, 17, C.muted, { body: true, maxWidth: w - 101 });
+      panel(ctx, { x: 1035, y: 483, w: 590, h: 366, depth: 17, accent: C.lime }, (w) => {
+        alpha(ctx, gatewayFocus, () => line(ctx, [[27, 3], [w - 27, 3]], C.lime, 4));
+        label(ctx, "02 / OUR GATEWAY", 31, 40, C.lime, 17, 1.5);
+        text(ctx, "Trusted Gateway", 29, 110, 70, C.paper, { maxWidth: w - 60 });
+        text(ctx, "OpenAPI 3.1", 34, 153, 27, C.muted, { body: true });
+        line(ctx, [[34, 165], [34 + 194 * open, 165]], rgba(C.lime, 0.8), 2);
+        line(ctx, [[33, 184], [w - 33, 184]], rgba(C.muted, 0.23), 1);
+        icon(ctx, "limit", 59, 224, 40, limits > 0.2 ? C.lime : C.muted);
+        text(ctx, "Spending limits", 100, 241, 45, C.paper, { maxWidth: w - 131 });
+        icon(ctx, "human", 59, 282, 39, approval > 0.2 ? C.amber : C.muted);
+        text(ctx, "Human approval", 100, 299, 45, C.paper, { maxWidth: w - 131 });
+        text(ctx, "Owner-defined authority", 35, 342, 23, C.muted, { body: true });
       });
 
-      panel(ctx, { ...source, light: true, depth: lerp(15, 24, focus), alpha: entry }, (w, h) => {
-        alpha(ctx, labelOut, () => {
-          label(ctx, "REQUEST ORIGIN", 29, 40, C.teal, 15, 1.6);
-          icon(ctx, "agent", w - 52, 49, 39, C.teal);
-          text(ctx, "Credentialed", 28, 115, 50, C.ink);
-          text(ctx, "agent", 28, 169, 55, C.ink);
-          text(ctx, "Workspace or external agent", 30, 218, 20, C.teal, { body: true, maxWidth: w - 60 });
-        });
-        alpha(ctx, labelIn, () => {
-          label(ctx, "02", 32, 43, C.teal, 17, 1.5);
-          text(ctx, "Agent workspace", 78, 58, 53, C.ink, { maxWidth: w - 157 });
-          mark(ctx, w - 45, 40, 27, C.teal);
-          line(ctx, [[32, 83], [w - 32, 83]], rgba(C.teal, 0.17), 1);
-          const need = at(t, cue(s, "chef", 0.2) - 0.18, 0.55);
-          reveal(ctx, need, () => {
-            label(ctx, "THE CHEF’S REQUEST", 36, 126, C.teal, 15, 1.6);
-            round(ctx, 31, 143, w - 62, 108, 14);
-            ctx.fillStyle = "#e2eeea";
+      panel(ctx, { x: 1620, y: 483, w: 360, h: 366, depth: 12, accent: C.teal }, (w) => {
+        label(ctx, "CHALLENGE APIs", 26, 40, C.muted, 18, 1.2);
+        text(ctx, "Valio Aimo", 25, 108, 59, C.paper, { maxWidth: w - 50 });
+        line(ctx, [[27, 133], [w - 27, 133]], rgba(C.muted, 0.23), 1);
+        [
+          ["Products", products],
+          ["Fixed prices", prices],
+          ["Stock", stock],
+        ].forEach(([value, highlight], i) => {
+          const y = 195 + i * 65;
+          alpha(ctx, highlight * 0.09, () => {
+            round(ctx, 15, y - 35, w - 30, 50, 8);
+            ctx.fillStyle = C.lime;
             ctx.fill();
-            text(ctx, "1,000 L lactose-free milk", 53, 184, 31, C.ink, { body: true, maxWidth: w - 112 });
-            text(ctx, "for Monday", 53, 225, 29, C.teal, { body: true });
-          }, 12, 1.5);
-          const exception = at(t, cue(s, "exceptions", 0.64) - 0.22, 0.55);
-          const rows = [
-            { name: "Source products", icon: "catalog", p: find, color: C.teal },
-            { name: "Handle exceptions", icon: "quote", p: exception, color: C.teal },
-            { name: "Ask a human", icon: "human", p: approval, color: "#91641f" },
-          ];
-          const rowWidth = (w - 80) / 3;
-          rows.forEach((row, i) => {
-            reveal(ctx, row.p, () => {
-              const x = 39 + rowWidth * i;
-              if (i > 0) line(ctx, [[x - 10, 287], [x - 10, h - 39]], rgba(C.teal, 0.17), 1);
-              icon(ctx, row.icon, x + 31, 316, 40, row.color);
-              text(ctx, row.name, x + 5, 367, 27, C.ink, { maxWidth: rowWidth - 25 });
-              line(ctx, [[x + 6, 391], [x + rowWidth - 27, 391]], rgba(row.color, 0.25), 2);
-            }, 16, 1.5);
           });
+          text(ctx, value, 29, y, 32, C.paper, { body: true, maxWidth: w - 60 });
+          if (highlight > 0) line(ctx, [[17, y - 27], [17, y + 5]], rgba(C.lime, highlight), 3);
         });
       });
 
-      panel(ctx, { ...gateway, alpha: entry, accent: C.lime, depth: 21 }, (w, h) => {
-        label(ctx, "01", 31, 39, C.lime, 18, 1.6);
-        text(ctx, "Trusted Gateway", 31, 101, lerp(67, 61, focus), C.paper, { maxWidth: w - 62 });
-        text(ctx, "OpenAPI 3.1", 34, 137, 23, C.muted, { body: true });
-        line(ctx, [[33, 158], [w - 33, 158]], rgba(C.muted, 0.2), 1);
-        alpha(ctx, labelOut, () => {
-          const pages = [
-            ["Owner-controlled access", "A request enters a defined path.", "agent", C.lime],
-            ["Find products", "Catalog lookup", "catalog", C.lime],
-            ["Price + stock", "Check the current quote", "quote", C.lime],
-            ["Enforce limits", "The agent’s granted authority", "limit", C.lime],
-            ["Human approval", "When the grant requires it", "human", C.amber],
-            ["Mock order", "Local record · no payment", "record", C.lime],
-            ["Audit trail", "Every step logged.", "audit", C.lime],
-          ];
-          phaseWeights(gatewayTime, [-0.36, ...times], (i, a, incoming, outgoing) => {
-            alpha(ctx, a, () => {
-              ctx.save();
-              ctx.translate(0, (1 - incoming) * 13 - outgoing * 13);
-              icon(ctx, pages[i][2], i === 0 ? 84 : 82, i === 0 ? 232 : 238, i === 0 ? 59 : 60, pages[i][3]);
-              text(ctx, pages[i][0], i === 0 ? 139 : 138, 236, i === 0 ? 37 : 44, C.paper, { maxWidth: w - 166 });
-              text(ctx, pages[i][1], 140, 278, i === 0 ? 20 : 21, C.muted, { body: true, maxWidth: w - 168 });
-              ctx.restore();
-            });
-          });
-          times.forEach((start, i) => {
-            const active = at(gatewayTime, start, 0.4);
-            const x = 35 + i * ((w - 70) / 6);
-            line(ctx, [[x, h - 41], [x + (w - 100) / 6, h - 41]], rgba(C.muted, 0.18), 3);
-            if (active > 0) line(ctx, [[x, h - 41], [x + (w - 100) / 6 * active, h - 41]], i === 3 ? C.amber : C.lime, 3);
-          });
-        });
-        alpha(ctx, labelIn, () => {
-          icon(ctx, approval > 0.2 ? "human" : "limit", 79, 239, 62, approval > 0.2 ? C.amber : C.lime);
-          text(ctx, "The same", 136, 222, 47, C.paper);
-          text(ctx, "authority rules.", 136, 275, 47, C.paper, { maxWidth: w - 165 });
-          text(ctx, "Limit · approval · audit", 36, h - 29, 22, C.muted, { body: true });
-        });
+      panel(ctx, { x: 380, y: 811, w: 500, h: 132, depth: 10, accent: C.teal }, (w) => {
+        alpha(ctx, external * (1 - focus * 0.6), () => line(ctx, [[26, 3], [w - 26, 3]], C.lime, 3));
+        text(ctx, "External purchasing agents", 28, 54, 45, C.paper, { maxWidth: w - 55 });
+        text(ctx, "Credentialed · direct access", 30, 99, 24, C.muted, { body: true, maxWidth: w - 60 });
       });
 
-      if (!second) {
-        const travel = at(t, cue(s, "credentialed agents", 0.22) - 0.3, Math.max(0.6, times[0] - cue(s, "credentialed agents", 0.22) + 0.65));
-        const pos = cubic(sourcePath, lerp(0.04, 0.99, travel));
-        token(ctx, pos[0], pos[1], 57, { alpha: credentials * (1 - at(t, times[0] + 0.15, 0.5)), yaw: -0.08, roll: -0.035 });
-        const approvalTravel = at(t, times[3] + 0.1, Math.max(0.5, times[4] - times[3] - 0.15));
-        if (approvalTravel > 0 && approvalTravel < 1) {
-          const pt = cubic(humanPath, approvalTravel);
-          token(ctx, pt[0], pt[1], 43, { color: C.amber, roll: 0, yaw: 0 });
-        }
-        alpha(ctx, logged, () => {
-          line(ctx, [[167, 855], [570, 855]], rgba(C.lime, 0.3), 1.5);
-          label(ctx, "EVERY STEP LOGGED", 173, 836, C.lime, 17, 1.8);
-        });
-      } else {
-        const travel = at(t, cue(s, "sources products", 0.43) - 0.1, 1.1);
-        if (travel > 0 && travel < 1) {
-          const pt = cubic(sourcePath, travel);
-          token(ctx, pt[0], pt[1], 55, { roll: 0, yaw: 0 });
-        }
-        alpha(ctx, approval, () => {
-          const branch = [[858, 706], [901, 765], [909, 786], [942, 786]];
-          route(ctx, branch, approval, C.amber, 2.3);
-        });
+      panel(ctx, { x: 1025, y: 811, w: 420, h: 132, depth: 10, accent: C.amber }, (w) => {
+        alpha(ctx, approval, () => line(ctx, [[26, 3], [w - 26, 3]], C.amber, 3));
+        icon(ctx, "human", 47, 64, 46, C.amber);
+        text(ctx, "Human approval", 85, 57, 41, C.paper, { maxWidth: w - 108 });
+        text(ctx, "Kitchen manager", 87, 98, 24, C.muted, { body: true });
+      });
+
+      panel(ctx, { x: 1600, y: 811, w: 400, h: 132, depth: 10, accent: C.lime }, (w) => {
+        alpha(ctx, Math.max(record, audit), () => line(ctx, [[26, 3], [w - 26, 3]], C.lime, 3));
+        label(ctx, "LOCAL RECORDS", 25, 31, C.lime, 17, 1.5);
+        text(ctx, "Mock order + audit", 24, 78, 43, C.paper, { maxWidth: w - 47 });
+        text(ctx, "No backend order or payment", 26, 112, 20, C.muted, { body: true, maxWidth: w - 50 });
+      });
+
+      routePacket(ctx, workspacePath, firstTime, taskAt + 0.15, 1.15);
+      routePacket(ctx, externalPath, firstTime, externalAt + 0.18, 1.8);
+      if (second) {
+        routePacket(ctx, dataPath, t, cue(s, "products", 0.16) + 0.12, 1.3);
+        routePacket(ctx, humanPath, t, approvalAt + 0.25, 1.1, C.amber);
+        routePacket(ctx, localPath, t, recordAt + 0.3, 1.35);
       }
     });
-    if (!second) {
-      alpha(ctx, record * (1 - logged), () => label(ctx, "MOCK ORDER / LOCAL DEMO", 134, 856, C.muted, 17, 1.8));
-    }
   }
 
   function scenarios(ctx, s, t) {
@@ -935,62 +966,65 @@
     if (firstError < 0 || secondError < 0) {
       throw new Error("CinematicMotion: terminal capture must contain both 409 Approval required and 403 Human required refusals.");
     }
-    const skip = cue(s, "skip", 0.29);
-    const self = cue(s, "approve", 0.56);
-    const firstAt = Math.max(skip + 0.23, 0.8);
-    const secondAt = Math.max(self + 0.38, firstAt + 1.1);
-    const refusedAt = Math.max(secondAt + 0.45, cue(s, "refused", 0.86) - 0.15);
-    const defaultStarts = [0.12, Math.max(0.35, skip - 0.45), skip, firstAt, Math.max(firstAt + 0.4, self - 0.42), self, secondAt, refusedAt];
-    const positions = [87, 154, 197, 244, 326, 368, 415, 493];
-    const first = at(t, firstAt, 0.35);
-    const second = at(t, secondAt, 0.38);
+    const firstGroup = lines.slice(1, firstError);
+    const secondGroup = lines.slice(firstError + 1, secondError);
+    const firstRequest = firstGroup.filter((value) => /^POST\s/.test(value)).pop();
+    const secondRequest = secondGroup.filter((value) => /^POST\s/.test(value)).pop();
+    const summary = lines.slice(secondError + 1).find((value) => /^Both refused/.test(value));
+    if (!firstRequest || !secondRequest || !summary || firstError >= secondError) {
+      throw new Error("CinematicMotion: terminal capture must include each refusal's original POST request and the captured refusal summary.");
+    }
+    const bypassAt = cue(s, "bypassing approval", 0.11) - 0.1;
+    const selfAt = cue(s, "Try letting", 0.36) - 0.1;
+    const firstAt = cue(s, "Refused", 0.26);
+    const secondAt = Math.max(firstAt + 0.9, cue(s, "Refused", 0.62, 1));
+    const rulesAt = Math.max(secondAt + 0.4, cue(s, "gateway rules", 0.8) - 0.1);
+    const entry = at(t, 0.03, 0.45);
 
-    reveal(ctx, at(t, 0.02, 0.5), () => text(ctx, "No bypass. No self-approval.", 128, 218, 108, C.paper, { maxWidth: 1660 }));
-    panel(ctx, { x: 718, y: 572, w: 1180, h: 571, yaw: -0.015, pitch: 0.012, depth: 18, accent: second > 0.15 ? C.red : C.amber }, (w, h) => {
-      label(ctx, "CAPTURED REFUSAL / LOCAL DEMO", 31, 37, C.muted, 17, 1.6);
-      line(ctx, [[31, 54], [w - 31, 54]], rgba(C.muted, 0.2), 1);
-      lines.forEach((value, i) => {
-        const start = defaultStarts[i] === undefined ? refusedAt + (i - 7) * 0.16 : defaultStarts[i];
-        const entered = at(t, start, 0.26);
-        const isFirst = i === firstError;
-        const isSecond = i === secondError;
-        const color = isFirst ? C.amber : isSecond ? C.red : value.startsWith("#") ? C.quiet : /^Both refused/.test(value) ? C.lime : C.paper;
-        const yy = positions[i] === undefined ? 493 + (i - 7) * 32 : positions[i];
-        if ((isFirst || isSecond) && entered > 0) {
-          alpha(ctx, entered, () => {
-            round(ctx, 19, yy - 34, w - 38, 52, 9);
-            ctx.fillStyle = rgba(color, 0.075);
-            ctx.fill();
-            line(ctx, [[21, yy - 26], [21, yy + 10]], color, 3);
-          });
-        }
-        reveal(ctx, entered, () => {
-          wrapped(ctx, value, 36, yy, w - 72, isFirst || isSecond ? 26 : i === 0 || /^Both refused/.test(value) ? 21 : 24, color, 1.28, isFirst || isSecond);
-        }, 7, 0);
+    wipeText(ctx, "Guardrails, built in.", 243, 228, 108, C.paper, entry, 1537);
+    alpha(ctx, entry, () => {
+      label(ctx, "CAPTURED GATEWAY RESPONSES / LOCAL DEMO", 247, 281, C.muted, 19, 1.65);
+      text(ctx, lines[0], 247, 331, 24, C.muted, { body: true, maxWidth: 1530 });
+    });
+    [
+      {
+        x: 616, title: "Bypass approval", number: "REQUEST 01",
+        comment: firstGroup.find((value) => value.startsWith("#")),
+        request: firstRequest, response: lines[firstError],
+        requestAt: bypassAt, responseAt: firstAt,
+      },
+      {
+        x: 1404, title: "Self-approval", number: "REQUEST 02",
+        comment: secondGroup.find((value) => value.startsWith("#")),
+        request: secondRequest, response: lines[secondError],
+        requestAt: selfAt, responseAt: secondAt,
+      },
+    ].forEach((attempt) => {
+      const shown = at(t, attempt.requestAt, 0.35);
+      const response = at(t, attempt.responseAt, 0.34);
+      panel(ctx, { x: attempt.x, y: 559, w: 744, h: 366, depth: 12, accent: C.teal, alpha: entry }, (w) => {
+        label(ctx, attempt.number, 30, 38, C.muted, 18, 1.7);
+        text(ctx, attempt.title, 27, 106, 55, C.paper, { maxWidth: w - 58 });
+        line(ctx, [[30, 129], [w - 30, 129]], rgba(C.muted, 0.24), 1);
+        reveal(ctx, shown, () => {
+          if (attempt.comment) text(ctx, attempt.comment, 32, 170, 22, C.muted, { body: true, maxWidth: w - 64 });
+          text(ctx, attempt.request, 31, 225, 30, C.paper, { body: true, bold: true, maxWidth: w - 62 });
+        }, 10, 0);
+        alpha(ctx, response, () => {
+          round(ctx, 18, 259, w - 36, 78, 10);
+          ctx.fillStyle = rgba(C.amber, 0.085);
+          ctx.fill();
+          line(ctx, [[20, 271], [20, 324]], C.amber, 4);
+        });
+        reveal(ctx, response, () => {
+          text(ctx, attempt.response, 35, 307, 33, C.amber, { body: true, bold: true, maxWidth: w - 68 });
+        }, 9, 0);
       });
     });
-    const codeX = 1396;
-    if (firstError >= 0) {
-      alpha(ctx, first * (1 - second), () => {
-        label(ctx, "REQUEST 01", codeX, 340, C.amber, 18, 1.8);
-        text(ctx, "409", codeX - 8, 540, 211, C.amber);
-        text(ctx, "Approval", codeX, 625, 66, C.paper);
-        text(ctx, "required", codeX, 695, 66, C.paper);
-        line(ctx, [[codeX, 747], [1766, 747]], rgba(C.amber, 0.5), 2);
-      });
-    }
-    if (secondError >= 0) {
-      reveal(ctx, second, () => {
-        label(ctx, "REQUEST 02", codeX, 340, C.red, 18, 1.8);
-        text(ctx, "403", codeX - 8, 540, 211, C.red);
-        text(ctx, "Human", codeX, 625, 66, C.paper);
-        text(ctx, "required", codeX, 695, 66, C.paper);
-        line(ctx, [[codeX, 747], [1766, 747]], rgba(C.red, 0.55), 2);
-      }, 14, 2);
-    }
-    if (firstError >= 0 && secondError >= 0) {
-      reveal(ctx, at(t, refusedAt, 0.38), () => label(ctx, "BOTH REFUSED", codeX, 806, C.lime, 23, 2.1), 10, 0);
-    }
+    reveal(ctx, at(t, secondAt + 0.35, 0.4), () => {
+      text(ctx, summary, 247, 803, 25, C.muted, { body: true, maxWidth: 1525 });
+    }, 9, 0);
+    wipeText(ctx, "Gateway rules. Not just prompts.", 243, 887, 70, C.lime, at(t, rulesAt, 0.4), 1530);
   }
 
   function rules(ctx, s, t) {
@@ -1083,45 +1117,28 @@
     });
   }
 
-  function ending(ctx, s, t, film) {
+  function ending(ctx, s, t) {
     const second = Number(s.visual && s.visual.part) === 2;
-    const firstSegment = (film.segments || []).find((item) => item.visual && item.visual.scene === "end" && Number(item.visual.part) === 1);
-    const before = firstSegment ? duration(firstSegment) : 2.7;
-    const difference = firstSegment && Number.isFinite(s.start) && Number.isFinite(firstSegment.start) ? s.start - firstSegment.start : before;
-    const elapsed = second ? Math.max(0, difference) + t : t;
-    const open = second ? 1 : at(t, cue(s, "Open", 0.02), 0.62);
-    const terms = second ? at(t, Math.max(0.65, cue(s, "On", 0.015)), 0.52) : 0;
-    const unfold = second ? at(t, 0.08, Math.min(1.7, duration(s) * 0.35)) : 0;
-    const frame = {
-      x: lerp(1481, 960, unfold),
-      y: lerp(486, 437, unfold),
-      w: lerp(381, 1664, unfold),
-      h: lerp(514, 574, unfold),
-      yaw: lerp(-0.29, 0, unfold),
-      pitch: lerp(0.1, 0, unfold),
-      roll: lerp(-0.025, 0, unfold),
-      depth: lerp(44, 9, unfold),
-      thickness: lerp(34, 10, unfold),
-      light: lerp(0.85, 0.64, unfold),
-      sweep: second ? at(t, 0.08, 1.8) : at(elapsed, 0.1, 2.2),
-    };
-    glow(ctx, 1350, 472, 655, 420, C.teal, lerp(0.23, 0.15, unfold));
-    gate(ctx, frame);
-    const dock = second ? at(t, 0.12, Math.min(1.58, duration(s) * 0.34)) : 0;
-    const tx = lerp(1422, 1706, dock);
-    const ty = lerp(501, 188, dock);
-    token(ctx, tx, ty, lerp(139, 78, dock), { yaw: lerp(-0.23, 0, dock), pitch: lerp(0.1, 0, dock), roll: lerp(-0.035, 0, dock) });
-    label(ctx, "VALIO AIMO", 185, 188, C.muted, 20, 3.2);
-    reveal(ctx, open, () => text(ctx, "Open to agents.", 178, 365, 172, C.paper, { maxWidth: 1517 }), 20, 2);
-    reveal(ctx, terms, () => text(ctx, "On Valio Aimo’s terms.", 181, 561, 161, C.lime, { maxWidth: 1510 }), 18, 2);
+    const d = duration(s);
+    const delegate = second ? 1 : at(t, Math.min(cue(s, "Delegate", 0.015), d - 1.8), 0.46);
+    const control = second ? 1 : at(t, Math.min(cue(s, "Keep control", 0.47), d - 1.8), 0.46);
+    const exit = second ? at(t, 0, 0.22) : 0;
+    pitchFrame(ctx, second ? 1 : at(t, 0, 0.55));
+    mark(ctx, 1718, 159, 67, C.lime);
+    label(ctx, "VALIO AIMO", 138, 178, C.paper, 25, 3.6);
+    wipeText(ctx, "Delegate the ordering.", 130, 427, 172, C.paper, delegate, 1575, exit);
+    wipeText(ctx, "Keep control.", 132, 623, 184, C.lime, control, 1575, exit);
     if (second) {
-      const detailsAt = Math.max(0.65, Math.min(cue(s, "terms", 0.25) + 0.28, duration(s) - 2.85));
-      const details = at(t, detailsAt, 0.48);
+      const openAt = Math.min(Math.max(0.25, cue(s, "Open", 0.025)), d - 1.9);
+      const termsAt = Math.min(Math.max(0.3, cue(s, "On Valio", 0.34)), d - 1.9);
+      wipeText(ctx, "Open to agents.", 129, 427, 183, C.paper, at(t, openAt, 0.46), 1582);
+      wipeText(ctx, "On Valio Aimo’s terms.", 132, 623, 166, C.lime, at(t, termsAt, 0.48), 1580);
+      const detailsAt = Math.min(Math.max(1.25, cue(s, "terms", 0.55) - 0.15), d - 1.9);
+      const details = at(t, detailsAt, 0.4);
       reveal(ctx, details, () => {
-        text(ctx, "THE DELUSIONALS", 133, 808, 48, C.paper, { maxWidth: 401 });
-        text(ctx, "Krish Waghresha  ·  Jakub Piotrowski", 608, 806, 28, C.muted, { body: true, maxWidth: 1172 });
-        text(ctx, "Synthetic systems · local mock orders · no payments", 136, 866, 25, C.muted, { body: true, maxWidth: 1630 });
-      }, 11, 1);
+        text(ctx, "The Delusionals · Krish Waghresha · Jakub Piotrowski · Junction 2026", 140, 813, 23, C.muted, { body: true, maxWidth: 1570 });
+        text(ctx, "Synthetic systems · local mock orders · no payments", 140, 874, 25, C.muted, { body: true, maxWidth: 1570 });
+      }, 9, 0);
     }
   }
 

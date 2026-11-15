@@ -1,136 +1,130 @@
 {
-  "title": "Open to Agents - Cinematic Cut",
+  "title": "Open to Agents - Business Pitch",
   "duration": 118.0,
   "maxSeconds": 119.0,
   "fps": 60,
   "width": 1920,
   "height": 1080,
-  "model": "eleven_multilingual_v2",
+  "timing": "fixed",
+  "model": "eleven_v4",
   "voiceSettings": {
-    "stability": 0.48,
-    "similarity_boost": 0.82,
-    "style": 0.25,
-    "use_speaker_boost": true,
-    "speed": 1.08
+    "stability": 0.5,
+    "similarity_boost": 0.75
   },
   "voices": {
-    "krish": {"name": "Krish", "env": "ELEVENLABS_VOICE_ID"},
-    "jakub": {"name": "Jakub", "env": "ELEVENLABS_VOICE_JAKUB"}
+    "krish": {
+      "name": "Krish", "env": "ELEVENLABS_VOICE_ID",
+      "delivery": "[confident, upbeat business pitch, smiling voice]"
+    },
+    "jakub": {
+      "name": "Jakub", "env": "ELEVENLABS_VOICE_JAKUB",
+      "delivery": "[excited, confident, energetic presentation]"
+    }
   },
   "originalSha256": "b4b5f21d1795ba3e83c49ee77e37478ea31bf6a6b8e7b5208d2d8c506327716d",
+  "edit": {
+    "chapters": [
+      {"id": "milk", "number": "01", "title": "Milk", "lines": ["Shortage +", "human approval"], "start": 39, "end": 83},
+      {"id": "butter", "number": "02", "title": "Butter", "lines": ["Within its", "authority"], "start": 83, "end": 98},
+      {"id": "boundary", "number": "03", "title": "Boundary", "lines": ["Bypass +", "self-approval"], "start": 98, "end": 109}
+    ],
+    "zooms": [
+      {"id": "approval", "label": "Human approval", "start": 69, "end": 77.5, "scale": 1.6, "center": [0.765, 0.32], "ramp": 0.8},
+      {"id": "agent-decisions", "label": "Agent decisions", "start": 93.3, "end": 97.9, "scale": 1.7, "center": [0.38, 0.80], "ramp": 0.8}
+    ],
+    "musicDynamics": [
+      {"name": "Anticipation", "start": 0, "duration": 6.5, "gainDb": 1.5},
+      {"name": "Reveal breath", "start": 6.5, "duration": 0.5, "gainDb": -17.0},
+      {"name": "Open to agents", "start": 7, "duration": 4, "gainDb": 2.0},
+      {"name": "Architecture", "start": 11, "duration": 28, "gainDb": -1.0},
+      {"name": "Evidence", "start": 39, "duration": 59, "gainDb": -5.0},
+      {"name": "Boundary", "start": 98, "duration": 11, "gainDb": -3.0},
+      {"name": "Payoff", "start": 109, "duration": 9, "gainDb": 1.5}
+    ]
+  },
   "segments": [
     {
-      "id": "s01", "speaker": "krish", "targetSeconds": 3.2,
-      "text": "Who places your next wholesale order?",
+      "id": "s01", "speaker": "krish", "targetSeconds": 7.0, "leadInSeconds": 2.0,
+      "text": "Twenty thousand kitchens. The next buyer is an agent.",
       "visual": {"scene": "hook"}
     },
     {
-      "id": "s02", "speaker": "jakub", "targetSeconds": 4.3,
-      "text": "For decades, a person. A phone call. A catalog. A webshop.",
-      "visual": {"scene": "history"}
-    },
-    {
-      "id": "s03", "speaker": "krish", "targetSeconds": 3.8,
-      "text": "Next, an agent. But who sets the rules?",
-      "visual": {"scene": "agent"}
-    },
-    {
-      "id": "s04", "speaker": "jakub", "targetSeconds": 4.3,
-      "text": "Our answer: open to agents. On Valio Aimo's terms.",
+      "id": "s04", "speaker": "jakub", "targetSeconds": 4.0,
+      "text": "Open to agents. On Valio Aimo's terms!",
       "visual": {"scene": "hero"}
     },
     {
-      "id": "s05", "speaker": "krish", "targetSeconds": 3.9,
-      "text": "We're The Delusionals. We built two things that work as one.",
-      "visual": {"scene": "title"}
-    },
-    {
-      "id": "s06", "speaker": "jakub", "targetSeconds": 10.8,
-      "text": "First, the Trusted Gateway. An open API for credentialed agents: find products, check price and stock, enforce limits, approve when needed, and record a mock order. Every step logged.",
+      "id": "s06", "speaker": "krish", "targetSeconds": 12.0,
+      "text": "We built two parts. The workspace turns a chef's need into a clear purchasing task. External purchasing agents can also connect directly.",
       "visual": {"scene": "architecture", "part": 1}
     },
     {
-      "id": "s07", "speaker": "krish", "targetSeconds": 7.1,
-      "text": "Second, the workspace. The chef describes the need. It sources products, handles exceptions, and asks a human when it matters.",
+      "id": "s07", "speaker": "jakub", "targetSeconds": 16.0,
+      "text": "The Trusted Gateway exposes products, fixed prices and stock through an open API. It enforces spending limits, routes human approval, and records a mock order. Every decision is traceable.",
       "visual": {"scene": "architecture", "part": 2}
     },
     {
-      "id": "s08", "speaker": "jakub", "targetSeconds": 2.5,
-      "text": "Three scenarios. One set of rules.",
-      "visual": {"scene": "scenarios"}
-    },
-    {
-      "id": "s09", "speaker": "jakub", "targetSeconds": 5.8,
-      "text": "First, a big order: a thousand litres of lactose-free milk, by Monday.",
+      "id": "s09", "speaker": "jakub", "targetSeconds": 7.5,
+      "text": "First: a thousand litres of lactose-free milk, by Monday. One clear purchasing request.",
       "visual": {"rec": "A", "sourceStart": 0.0, "sourceEnd": 7.352},
-      "chapter": "01 / A big order", "caption": true
+      "chapter": "milk", "caption": true
     },
     {
-      "id": "s10", "speaker": "jakub", "targetSeconds": 4.2,
-      "text": "The agent structures the request and clearly marks its assumptions.",
+      "id": "s10", "speaker": "jakub", "targetSeconds": 5.0,
+      "text": "It turns the request into clear requirements, with assumptions visible.",
       "visual": {"rec": "A", "sourceStart": 7.352, "sourceEnd": 11.871},
-      "chapter": "01 / A big order", "caption": true
+      "chapter": "milk", "caption": true
     },
     {
-      "id": "s11", "speaker": "krish", "targetSeconds": 4.3,
-      "text": "It checks current price and stock for eleven shortlisted products.",
+      "id": "s11", "speaker": "krish", "targetSeconds": 4.5,
+      "text": "Then checks price and stock across eleven shortlisted products.",
       "visual": {"rec": "A", "sourceStart": 11.871, "sourceEnd": 15.833},
-      "chapter": "01 / A big order", "caption": true
+      "chapter": "milk", "caption": true
     },
     {
-      "id": "s12", "speaker": "krish", "targetSeconds": 11.6,
-      "text": "But the usual Arla has only three hundred and eighty-four litres. The official substitute meets the request, in stock, and costs six hundred euros less than splitting the basket.",
+      "id": "s12", "speaker": "krish", "targetSeconds": 12.0,
+      "text": "But only three hundred and eighty-four litres of the usual milk are available. The official substitute fills the order, for over six hundred euros less than a split basket.",
       "visual": {"rec": "A", "sourceStart": 15.833, "sourceEnd": 26.436},
-      "chapter": "01 / A stock-out, not a dead end", "caption": true
+      "chapter": "milk", "caption": true
     },
     {
-      "id": "s13", "speaker": "krish", "targetSeconds": 4.6,
-      "text": "Eleven hundred and fifty euros exceeds the agent's five-hundred-euro limit.",
+      "id": "s13", "speaker": "krish", "targetSeconds": 5.0,
+      "text": "Eleven hundred and fifty euros. Over its five-hundred-euro limit.",
       "visual": {"rec": "A", "sourceStart": 26.436, "sourceEnd": 30.736},
-      "chapter": "01 / Authority has a limit", "caption": true
+      "chapter": "milk", "caption": true
     },
     {
-      "id": "s14", "speaker": "jakub", "targetSeconds": 9.5,
-      "text": "The manager approves the exact basket. Price and stock are checked again. A mock order is recorded, with a full audit trail.",
+      "id": "s14", "speaker": "jakub", "targetSeconds": 10.0,
+      "text": "The manager approves that exact basket. Price and stock are checked again, before a mock order is recorded. Every step is logged.",
       "visual": {"rec": "B", "sourceStart": 0.0, "sourceEnd": 8.606},
-      "chapter": "01 / The kitchen manager", "caption": true
+      "chapter": "milk", "caption": true
     },
     {
-      "id": "s15", "speaker": "jakub", "targetSeconds": 4.2,
-      "text": "Second, twenty kilos of butter for Friday.",
+      "id": "s15", "speaker": "krish", "targetSeconds": 5.0,
+      "text": "Second: twenty kilos of butter, for Friday. An everyday order.",
       "visual": {"rec": "C", "sourceStart": 0.0, "sourceEnd": 4.798},
-      "chapter": "02 / An everyday order", "caption": true
+      "chapter": "butter", "caption": true
     },
     {
-      "id": "s16", "speaker": "krish", "targetSeconds": 6.2,
-      "text": "Forty-two euros. Under the limit. The agent commits on its own, and it's still on the record.",
-      "visual": {"rec": "C", "sourceStart": 4.798, "sourceEnd": 10.478},
-      "chapter": "02 / Within its authority", "caption": true
+      "id": "s16", "speaker": "krish", "targetSeconds": 10.0,
+      "text": "Forty-two euros, thirty-seven cents. Within its authority, it orders automatically. The decision trail explains the price, delivery, and rejected alternatives.",
+      "visual": {"rec": "C", "sourceStart": 4.798, "sourceEnd": 10.478, "holdEndSeconds": 4.0},
+      "chapter": "butter", "caption": true
     },
     {
-      "id": "s17", "speaker": "krish", "targetSeconds": 7.0,
-      "text": "Third: an agent tries to skip the manager, then approve itself. Both requests are refused.",
+      "id": "s17", "speaker": "jakub", "targetSeconds": 11.0,
+      "text": "Third: try bypassing approval. Refused. Try letting the agent approve itself. Refused again. These are gateway rules, not just prompts.",
       "visual": {"scene": "terminal"},
-      "chapter": "03 / An agent tries to cheat", "caption": true
+      "chapter": "boundary", "caption": true
     },
     {
-      "id": "s18", "speaker": "jakub", "targetSeconds": 7.7,
-      "text": "Small orders alone. Humans sign what matters. Never self-approval, stale quotes, or guessing allergens are safe.",
-      "visual": {"scene": "rules"}
-    },
-    {
-      "id": "s19", "speaker": "krish", "targetSeconds": 4.0,
-      "text": "The webshop stays. The buying interface is changing.",
-      "visual": {"scene": "moving"}
-    },
-    {
-      "id": "s20", "speaker": "jakub", "targetSeconds": 2.7,
-      "text": "Open to agents.",
+      "id": "s20", "speaker": "krish", "targetSeconds": 4.0,
+      "text": "Delegate the ordering. Keep control.",
       "visual": {"scene": "end", "part": 1}
     },
     {
-      "id": "s21", "speaker": "krish", "targetSeconds": 5.5,
-      "text": "On Valio Aimo's terms.",
+      "id": "s21", "speaker": "jakub", "targetSeconds": 5.0,
+      "text": "Open to agents. On Valio Aimo's terms!",
       "visual": {"scene": "end", "part": 2}
     }
   ],

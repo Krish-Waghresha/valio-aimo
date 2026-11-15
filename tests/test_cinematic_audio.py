@@ -76,6 +76,7 @@ def raw_meta(path, ident="s21", duration=None):
 
 
 def test_allocation_preserves_speech_and_source_windows(config):
+    config["timing"] = "weighted"
     durations = [2.0] * len(config["segments"])
     durations[-1] = 8.0  # Longer than its design weight: it must never be clipped.
     stems = [
@@ -107,6 +108,75 @@ def test_extra_frames_follow_design_weights_after_measured_minimums():
     extras = [round(segment["duration"] * 60) - floor for segment, floor in zip(allocated, minimum, strict=True)]
     assert abs(extras[1] - extras[0] * 3) <= 3
     assert sum(round(segment["duration"] * 60) for segment in allocated) == 7080
+
+
+def test_fixed_edit_preserves_chapter_times_and_rejects_spillover():
+    segments = [
+        {"id": "opening", "targetSeconds": 11},
+        {"id": "architecture", "targetSeconds": 28},
+        {"id": "evidence", "targetSeconds": 70},
+        {"id": "close", "targetSeconds": 9},
+    ]
+    for durations in ([10, 27, 40, 6], [3, 12, 65, 6]):
+        timeline = audio.allocate_timeline(segments, durations, fixed=True)
+        assert [segment["start"] for segment in timeline] == [0, 11, 39, 109]
+        assert [segment["duration"] for segment in timeline] == [11, 28, 70, 9]
+    with pytest.raises(audio.AudioError, match="architecture:.*fixed slot"):
+        audio.allocate_timeline(segments, [3, 28, 40, 6], fixed=True)
+    segments[-1]["targetSeconds"] = 8
+    with pytest.raises(audio.AudioError, match="fill exactly"):
+        audio.allocate_timeline(segments, [3, 12, 40, 6], fixed=True)
+
+
+def test_delivery_tags_do_not_enter_captions_or_move_spoken_timestamps():
+    delivery = "[confident, upbeat]"
+    text = "Choose butter, [verified]."
+    tagged = delivery + " " + text
+    alignment = {
+        "characters": list(tagged),
+        "character_start_times_seconds": [index * .02 for index in range(len(tagged))],
+        "character_end_times_seconds": [(index + 1) * .02 for index in range(len(tagged))],
+    }
+    words = audio.words_from_alignment(alignment, text, delivery=delivery)
+    assert [word["word"] for word in words] == ["Choose", "butter,", "[verified]."]
+    assert words[0]["start"] == pytest.approx((len(delivery) + 1) * .02)
+    assert words[-1]["end"] == pytest.approx(len(tagged) * .02)
+    with pytest.raises(audio.AudioError, match="does not match"):
+        audio.words_from_alignment(alignment, text, delivery="[shouting]")
+
+
+def test_v4_punctuation_pause_is_not_a_spoken_word_overrun():
+    alignment = {
+        "characters": list("agent."),
+        "character_start_times_seconds": [3.367, 3.431, 3.495, 3.559, 3.623, 3.687],
+        "character_end_times_seconds": [3.431, 3.495, 3.559, 3.623, 3.687, 4.007],
+    }
+    words = audio.words_from_alignment(alignment, "agent.", exclude_pause_timing=True)
+    assert words == [{"word": "agent.", "start": 3.367, "end": 3.687}]
+    audio.validate_words(words, 4.0)
+    with pytest.raises(audio.AudioError, match="outside"):
+        audio.validate_words(words, 3.68)
+
+
+def test_v4_clock_overhang_gets_bounded_pcm_padding_not_rewritten_words():
+    measured = {"duration": 9.28, "codec": "mp3", "sampleRate": 44100}
+    words = [{"word": "basket.", "start": 8.845, "end": 9.285}]
+    padding = audio.alignment_padding(words, measured, "eleven_v4")
+    assert padding == pytest.approx(.005 + 1 / 48000)
+    audio.validate_words(words, measured["duration"] + padding)
+    assert words[0]["end"] == 9.285
+    with pytest.raises(audio.AudioError, match="more than one MP3 frame"):
+        audio.alignment_padding([{**words[0], "end": 9.4}], measured, "eleven_v4")
+    with pytest.raises(audio.AudioError, match="more than one MP3 frame"):
+        audio.alignment_padding(words, measured, "eleven_multilingual_v2")
+
+
+def test_reading_hold_cannot_accelerate_the_demo(config):
+    audio.validate_config(config)
+    milk = next(segment for segment in config["segments"] if segment["id"] == "s09")
+    milk["visual"]["holdEndSeconds"] = 2
+    with pytest.raises(audio.AudioError, match="accelerate the recorded demo"):
+        audio.validate_config(config)
 
 
 def test_tempo_requires_consent_and_retimes_every_word():
@@ -159,6 +229,8 @@ def test_fingerprint_tracks_voice_settings_text_and_same_speaker_context(config,
 
 
 def test_voice_cache_never_repeats_paid_request_and_detects_corruption(config, build, monkeypatch):
+    first_segment = copy.deepcopy(config["segments"][0])
+    config["segments"] = [first_segment, config["segments"][1], {**first_segment, "id": "repeat"}]
     encoded = base64.b64encode(tone(build / "fixture.mp3", 1.2).read_bytes()).decode()
     calls = []
 
@@ -177,9 +249,10 @@ def test_voice_cache_never_repeats_paid_request_and_detects_corruption(config, b
     with pytest.raises(audio.AudioError, match="use --generate"):
         audio.voices(config, only=["s01"])
     assert not calls
-    first = audio.voices(config, only=["s01"], generate=True)
-    second = audio.voices(config, only=["s01"], generate=True)
+    first = audio.voices(config, only=["s01", "repeat"], generate=True)
+    second = audio.voices(config, only=["s01", "repeat"], generate=True)
     assert first == second
+    assert first[0]["audio"] == first[1]["audio"]
     assert len(calls) == 1
     saved = audio.from_relative(first[0]["audio"])
     saved.write_bytes(saved.read_bytes() + b"corrupted")
@@ -233,6 +306,7 @@ def test_alignment_rejects_missing_or_out_of_bounds_final_word():
 
 
 def test_plan_cache_rejects_changed_identity_config_and_film(config, build, monkeypatch):
+    config["timing"] = "weighted"
     config["segments"] = config["segments"][:2]
     payload = tone(build / "fixture.mp3", 2.0).read_bytes()
     for index, segment in enumerate(config["segments"]):
@@ -249,7 +323,8 @@ def test_plan_cache_rejects_changed_identity_config_and_film(config, build, monk
         audio.atomic_json(response, {"audio_base64": base64.b64encode(payload).decode(), "alignment": alignment})
         meta = audio.artifact_metadata(
             raw, inputs, audio.probe_audio(raw), id=segment["id"], speaker=segment["speaker"],
-            words=audio.words_from_alignment(alignment, segment["text"]), responseSha256=audio.sha256(response),
+            words=audio.words_from_alignment(alignment, segment["text"], exclude_pause_timing=True),
+            responseSha256=audio.sha256(response),
         )
         audio.atomic_json(meta_path, meta)
     terminal = build / "terminal-fixture.json"
@@ -282,6 +357,21 @@ def test_local_tempo_stereo_graph_and_two_pass_master(build):
     assert stem["words"][-1]["end"] == pytest.approx(1.99 / 1.08)
     assert stem["probe"]["duration"] > stem["words"][-1]["end"]
     assert stem["silenceTrim"] is None
+    delayed = audio.normalized_voice(raw, generate=True, ffmpeg_version=version, lead_in=2)
+    assert delayed["probe"]["duration"] == pytest.approx(4.0, abs=1 / 48000)
+    assert delayed["words"][0]["start"] == pytest.approx(raw["words"][0]["start"] + 2)
+    assert delayed["words"][-1]["end"] == pytest.approx(raw["words"][-1]["end"] + 2)
+    leading = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(audio.from_relative(delayed["audio"])),
+         "-t", "1.9", "-f", "s16le", "-c:a", "pcm_s16le", "-"],
+        check=True, capture_output=True,
+    ).stdout
+    assert leading and not any(leading)
+    overhanging = {**raw, "words": [*raw["words"][:-1], {**raw["words"][-1], "end": 2.005}],
+                   "alignmentPaddingSeconds": .005 + 1 / 48000}
+    padded = audio.normalized_voice(overhanging, generate=True, ffmpeg_version=version)
+    assert padded["probe"]["duration"] == pytest.approx(2.005 + 1 / 48000, abs=1 / 48000)
+    assert padded["words"][-1]["end"] == 2.005
 
     duration = 7.0
     stereo = tone(build / "stereo.wav", duration, stereo=True)

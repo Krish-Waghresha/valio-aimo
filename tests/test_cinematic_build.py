@@ -50,3 +50,17 @@ def test_timeline_rejects_unusable_deliverables(film, failure):
 def test_subtitle_timestamp_carries_rounded_milliseconds():
     assert builder.srt_timestamp(59.9996) == "00:01:00,000"
     assert builder.srt_timestamp(117.225) == "00:01:57,225"
+
+
+@pytest.mark.parametrize("failure", ["third_zoom", "wrong_scenario", "chapter_drift", "accelerated_hold"])
+def test_editorial_plan_rejects_unclear_or_rushed_demo(film, failure):
+    if failure == "third_zoom":
+        film["edit"]["zooms"].append({**film["edit"]["zooms"][0], "id": "extra"})
+    elif failure == "wrong_scenario":
+        film["edit"]["zooms"][1].update(start=55, end=60)
+    elif failure == "chapter_drift":
+        film["edit"]["chapters"][0]["start"] += 1
+    else:
+        next(segment for segment in film["segments"] if segment["id"] == "s16")["visual"]["holdEndSeconds"] = 8
+    with pytest.raises(ValueError):
+        builder.validate_timeline(film)

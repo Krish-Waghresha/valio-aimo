@@ -23,26 +23,24 @@
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
   const ease = (x) => { x = clamp(x); return x * x * x * (x * (x * 6 - 15) + 10); };
   const lerp = (a, b, p) => a + (b - a) * p;
-  const mix = (a, b, p) => a.map((v, i) => lerp(v, b[i], p));
   const imageCache = new Map();
   let film;
 
-  function keyframes(frames, p) {
-    if (p <= frames[0][0]) return frames[0][1];
-    for (let i = 1; i < frames.length; i++) {
-      if (p <= frames[i][0]) {
-        const [a, from] = frames[i - 1], [b, to] = frames[i];
-        return mix(from, to, ease((p - a) / (b - a)));
-      }
-    }
-    return frames[frames.length - 1][1];
+  function recordingPosition(segment, localTime) {
+    const visual = segment.visual;
+    const playSeconds = segment.duration - (visual.holdEndSeconds || 0);
+    if (playSeconds <= 0) throw new Error(`No playback time in ${segment.id}`);
+    const p = clamp(localTime / playSeconds);
+    const sourceTime = lerp(visual.sourceStart, visual.sourceEnd, p);
+    return {
+      recording: visual.rec, sourceTime, sourceFrame: Math.floor(sourceTime * SOURCE_FPS),
+      readingHold: localTime >= playSeconds,
+    };
   }
 
   async function recordingFrame(segment, localTime) {
     const visual = segment.visual;
-    const p = clamp(localTime / segment.duration);
-    const sourceTime = lerp(visual.sourceStart, visual.sourceEnd, p);
-    const frame = Math.floor(sourceTime * SOURCE_FPS);
+    const frame = recordingPosition(segment, localTime).sourceFrame;
     const url = `../build/rec/${visual.rec}/${String(frame).padStart(5, "0")}.jpg`;
     if (imageCache.has(url)) {
       const existing = imageCache.get(url);
@@ -72,124 +70,65 @@
     ctx.fillText(str, x, y);
   }
 
-  const FULL_STAGE = [110, 172, 1700, 722];
-  const SIDE_STAGE = [468, 180, 1342, 715];
-  const DECISION_STAGE = [1030, 200, 780, 675];
-  const ORDER_STAGE = [1140, 174, 670, 720];
-  const OVERVIEW = [145, 68, 1260, 625];
-  const REQUEST = [152, 120, 920, 500];
-  const UNDERSTOOD = [166, 211, 900, 478];
-  const OPTIONS = [164, 243, 866, 372];
-  const DECISION = [1033, 126, 338, 292];
-  const AUDIT = [166, 331, 862, 340];
-
-  function camera(segment, p) {
-    let crop = OVERVIEW, stage = FULL_STAGE, rail = null, railOpacity = 1;
-    if (segment.id === "s09") {
-      stage = SIDE_STAGE;
-      crop = keyframes([[0, [125, 45, 1250, 665]], [.35, REQUEST], [1, REQUEST]], p);
-      rail = ["1,000 L", "Lactose-free milk", "By Monday."];
-    } else if (segment.id === "s10") {
-      stage = keyframes([[0, SIDE_STAGE], [.24, FULL_STAGE], [1, FULL_STAGE]], p);
-      crop = keyframes([[0, REQUEST], [.35, UNDERSTOOD], [.82, UNDERSTOOD], [1, OVERVIEW]], p);
-    } else if (segment.id === "s11") {
-      crop = keyframes([[0, OVERVIEW], [.5, [166, 110, 1190, 520]], [1, OVERVIEW]], p);
-    } else if (segment.id === "s12") {
-      crop = keyframes([[0, OVERVIEW], [.19, OPTIONS], [.77, OPTIONS], [1, OVERVIEW]], p);
-    } else if (segment.id === "s13") {
-      stage = keyframes([[0, FULL_STAGE], [.5, DECISION_STAGE], [1, DECISION_STAGE]], p);
-      crop = keyframes([[0, OVERVIEW], [.5, DECISION], [1, DECISION]], p);
-      rail = ["€1,150", "Agent authority: €500", "Human approval required."];
-      railOpacity = ease((p - .36) / .14);
-    } else if (segment.id === "s14") {
-      stage = keyframes([[0, DECISION_STAGE], [.42, DECISION_STAGE], [.72, FULL_STAGE], [1, FULL_STAGE]], p);
-      crop = keyframes([[0, DECISION], [.42, DECISION], [.72, AUDIT], [1, AUDIT]], p);
-      rail = ["One basket.", "One human decision.", "Then price and stock rechecked."];
-      railOpacity = 1 - ease((p - .37) / .1);
-    } else if (segment.id === "s15") {
-      stage = SIDE_STAGE;
-      crop = keyframes([[0, [130, 40, 1240, 660]], [.32, REQUEST], [1, UNDERSTOOD]], p);
-      rail = ["20 kg", "Butter for Friday.", "An everyday order."];
-    } else if (segment.id === "s16") {
-      stage = keyframes([[0, SIDE_STAGE], [.2, FULL_STAGE], [.5, FULL_STAGE], [.76, ORDER_STAGE], [1, ORDER_STAGE]], p);
-      crop = keyframes([[0, UNDERSTOOD], [.24, OVERVIEW], [.5, OVERVIEW], [.76, [1040, 126, 340, 410]], [1, [1040, 126, 340, 410]]], p);
-      rail = ["€42.37", "Within its authority.", "No manager approval needed."];
-      railOpacity = ease((p - .66) / .1);
-    }
-    return {crop, stage, rail, railOpacity};
+  function cameraState(time) {
+    const zoom = film.edit.zooms.find(item => time >= item.start && time < item.end);
+    if (!zoom) return {id: null, scale: 1, amount: 0, center: [.5, .5]};
+    const amount = Math.min(ease((time - zoom.start) / zoom.ramp), ease((zoom.end - time) / zoom.ramp));
+    return {
+      id: zoom.id, label: zoom.label, scale: lerp(1, zoom.scale, amount), amount,
+      center: [lerp(.5, zoom.center[0], amount), lerp(.5, zoom.center[1], amount)],
+    };
   }
 
-  function fitCrop(box, image, aspect) {
-    let [x, y, w, h] = box;
-    const cx = x + w / 2, cy = y + h / 2;
-    if (w / h < aspect) w = h * aspect;
-    else h = w / aspect;
-    const limit = Math.min(1, image.naturalWidth / w, image.naturalHeight / h);
-    w *= limit; h *= limit;
-    x = clamp(cx - w / 2, 0, image.naturalWidth - w);
-    y = clamp(cy - h / 2, 0, image.naturalHeight - h);
+  function cameraCrop(camera, image) {
+    const w = image.naturalWidth / camera.scale, h = image.naturalHeight / camera.scale;
+    const x = clamp(camera.center[0] * image.naturalWidth - w / 2, 0, image.naturalWidth - w);
+    const y = clamp(camera.center[1] * image.naturalHeight - h / 2, 0, image.naturalHeight - h);
     return [x, y, w, h];
   }
 
-  function railLabel(lines, t, segment) {
-    const arrive = ease(t / .75);
-    ctx.save();
-    ctx.globalAlpha *= arrive;
-    const x = 112 - (1 - arrive) * 35;
-    const broad = segment.id === "s13" || segment.id === "s14" || segment.id === "s16";
-    const size = broad ? 102 : 94;
-    text(lines[0], x, 404, size, C.lime, "Barlow Condensed", 700);
-    text(lines[1], x, 466, broad ? 32 : 27, "#eef5f6");
-    text(lines[2], x, 511, broad ? 28 : 25, C.muted);
-    ctx.strokeStyle = "#4b6c78"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x, 560); ctx.lineTo(x + (broad ? 660 : 280), 560); ctx.stroke();
-    text("RECORDED DEMO", x, 602, 19, C.muted, "DM Sans", 700);
-    ctx.restore();
-  }
-
   function drawEvidence(image, segment, localTime) {
-    const p = clamp(localTime / segment.duration);
-    const {crop, stage, rail, railOpacity} = camera(segment, p);
-    const [x, y, w, h] = stage;
-    const first = segment.id === "s09" || segment.id === "s15";
-    const enter = first ? ease(localTime / 1.05) : 1;
-    const tilt = first ? (1 - enter) * -.015 : 0;
-    const lift = first ? (1 - enter) * 54 : 0;
-    if (rail && railOpacity > 0) {
-      ctx.save(); ctx.globalAlpha *= railOpacity;
-      railLabel(rail, localTime, segment);
-      ctx.restore();
-    }
+    const camera = cameraState(segment.start + localTime);
+    const crop = cameraCrop(camera, image);
     ctx.save();
-    ctx.translate(x + w / 2, y + h / 2 + lift);
-    ctx.rotate(tilt);
-    ctx.scale(.97 + .03 * enter, .97 + .03 * enter);
-    ctx.globalAlpha *= .3 + .7 * enter;
-    ctx.shadowColor = "#0009"; ctx.shadowBlur = 55; ctx.shadowOffsetY = 30;
-    roundRect(ctx, -w / 2, -h / 2, w, h, 22);
-    ctx.fillStyle = "#fff"; ctx.fill();
-    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-    ctx.save();
-    roundRect(ctx, -w / 2, -h / 2, w, h, 22); ctx.clip();
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
-    const [sx, sy, sw, sh] = fitCrop(crop, image, w / h);
-    ctx.drawImage(image, sx, sy, sw, sh, -w / 2, -h / 2, w, h);
+    ctx.drawImage(image, ...crop, 0, 0, WIDTH, HEIGHT);
     ctx.restore();
-    const rim = ctx.createLinearGradient(-w / 2, -h / 2, w / 2, h / 2);
-    rim.addColorStop(0, "#e1f0cf"); rim.addColorStop(.35, "#6c899555"); rim.addColorStop(1, "#a8c6d0aa");
-    roundRect(ctx, -w / 2, -h / 2, w, h, 22);
-    ctx.strokeStyle = rim; ctx.lineWidth = 2; ctx.stroke();
-    ctx.restore();
+    return {...recordingPosition(segment, localTime), camera: {...camera, crop}};
   }
 
   function chapter(segment, localTime) {
     if (!segment.chapter) return;
+    const item = film.edit.chapters.find(item => item.id === segment.chapter);
+    if (!item) throw new Error(`Missing chapter: ${segment.chapter}`);
+    const camera = cameraState(segment.start + localTime);
+    const arrival = ease((segment.start + localTime - item.start) / .4);
+    const dark = !segment.visual.rec;
+    const ink = dark ? "#edf5f5" : C.teal;
     ctx.save();
-    ctx.globalAlpha *= ease((localTime + .1) / .45);
-    ctx.fillStyle = C.lime;
-    roundRect(ctx, 110, 72, 7, 43, 3); ctx.fill();
-    text(segment.chapter, 139, 102, 30, "#fff", "DM Sans", 700);
-    text("RECORDED SYNTHETIC SERVICES / MOCK ORDERS", 1810, 100, 17, C.muted, "DM Sans", 700, "right");
+    ctx.globalAlpha *= arrival * (1 - ease(camera.amount / .16));
+    roundRect(ctx, 18, 204, 175, 280, 12);
+    ctx.fillStyle = dark ? "#0b232b" : "#eef5f2"; ctx.fill();
+    text("SCENARIO", 33, 235, 14, ink, "DM Sans", 700);
+    text(`${item.number} / 03`, 33, 279, 25, ink, "DM Sans", 700);
+    text(item.title, 32, 341, 44, ink, "Barlow Condensed", 700);
+    item.lines.forEach((line, index) => text(line, 33, 382 + index * 28, 18, ink));
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = i === Number(item.number) - 1 ? (dark ? C.lime : C.teal) : (dark ? "#294a55" : "#c5d7d5");
+      roundRect(ctx, 33 + i * 47, 448, 35, 4, 2); ctx.fill();
+    }
+    ctx.restore();
+    if (camera.id) {
+      ctx.save();
+      ctx.globalAlpha *= arrival * ease((camera.amount - .12) / .15);
+      roundRect(ctx, 24, 22, 350, 50, 10);
+      ctx.fillStyle = "#020b0eee"; ctx.fill();
+      text(`${item.number}/03  ·  ${camera.label.toUpperCase()}`, 41, 54, 18, "#fff", "DM Sans", 700);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha *= arrival;
+    text("RECORDED SYNTHETIC SERVICES / LOCAL MOCK ORDERS / NO PAYMENTS", 1860, 1060, 13, C.muted, "DM Sans", 700, "right");
     ctx.restore();
   }
 
@@ -218,14 +157,17 @@
   async function drawSegment(segment, localTime, alpha) {
     ctx.save();
     ctx.globalAlpha = alpha;
-    if (segment.visual.rec) drawEvidence(await recordingFrame(segment, localTime), segment, localTime);
+    let evidence;
+    if (segment.visual.rec) evidence = drawEvidence(await recordingFrame(segment, localTime), segment, localTime);
     else window.CinematicMotion.scene(ctx, segment, localTime, film);
     ctx.restore();
+    return evidence;
   }
 
   window.loadFilm = async (value) => {
     film = value;
     if (!film.segments?.length || !Number.isFinite(film.duration)) throw new Error("Invalid film timeline");
+    if (!Array.isArray(film.edit?.zooms) || !Array.isArray(film.edit?.chapters)) throw new Error("Missing fixed editorial plan");
     if (!window.CinematicMotion?.scene || !window.CinematicMotion?.background) throw new Error("Motion renderer is missing");
     await Promise.all([
       document.fonts.load('700 80px "Barlow Condensed"'),
@@ -247,18 +189,18 @@
     const local = time - segment.start;
     const previous = film.segments[index - 1];
     const continuous = previous && (
-      (segment.visual.rec && segment.visual.rec === previous.visual.rec) ||
-      (segment.visual.scene === previous.visual.scene)
+      (segment.visual.rec && previous.visual.rec && segment.chapter === previous.chapter) ||
+      (segment.visual.scene && segment.visual.scene === previous.visual.scene)
     );
-    const blend = previous && !continuous ? ease(local / .65) : 1;
+    const blend = previous && !continuous ? ease(local / .4) : 1;
     if (previous && blend < 1) await drawSegment(previous, Math.max(0, previous.duration - 1 / film.fps), 1 - blend);
-    await drawSegment(segment, local, blend);
-    chapter(segment, local);
+    const evidence = await drawSegment(segment, local, blend);
     subtitle(segment, local);
+    chapter(segment, local);
     const fadeIn = ease(time / .35), fadeOut = ease((film.duration - time) / .45);
     ctx.fillStyle = `rgba(2,11,14,${1 - Math.min(fadeIn, fadeOut)})`;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    return {segment: segment.id, time};
+    return {segment: segment.id, time, ...(evidence || {})};
   };
 </script>
 </body>

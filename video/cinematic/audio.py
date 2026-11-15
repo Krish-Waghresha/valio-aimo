@@ -294,8 +294,10 @@ def validate_config(config):
     for key, expected in (("duration", 118.0), ("maxSeconds", 119.0), ("fps", 60), ("width", 1920), ("height", 1080)):
         if config.get(key) != expected:
             raise AudioError(f"The approved cinematic {key} must be {expected}.")
-    if config.get("model") != "eleven_multilingual_v2":
-        raise AudioError("The approved speech model is eleven_multilingual_v2.")
+    if config.get("model") not in ("eleven_multilingual_v2", "eleven_v4"):
+        raise AudioError("Use the original multilingual v2 model or the auditioned Eleven v4 model.")
+    if config.get("timing", "weighted") not in ("weighted", "fixed"):
+        raise AudioError("Timing must be weighted or fixed.")
     if not isinstance(config.get("voiceSettings"), dict):
         raise AudioError("voiceSettings must be an object.")
     voices = config.get("voices", {})
@@ -309,6 +311,18 @@ def validate_config(config):
             raise AudioError("Each speaker needs a display name.")
         if any(key.lower() in ("voiceid", "voice_id", "api_key", "key") for key in voice):
             raise AudioError("Voice identities and credentials belong only in environment variables.")
+        delivery = voice.get("delivery", "")
+        if not isinstance(delivery, str) or (delivery and not re.fullmatch(r"\[[^\[\]\r\n]+\]", delivery)):
+            raise AudioError("Delivery must be one explicit leading audio tag.")
+        if delivery and config["model"] != "eleven_v4":
+            raise AudioError("Performance tags require the auditioned expressive model, not multilingual v2.")
+        if config["model"] == "eleven_v4":
+            settings = {**config["voiceSettings"], **voice.get("settings", {})}
+            if set(settings) - {"stability", "similarity_boost"}:
+                raise AudioError("Eleven v4 supports stability and similarity here, not style, speed or speaker boost.")
+            for key, value in settings.items():
+                if number(value, key) > 1:
+                    raise AudioError(f"{key} must be between zero and one.")
     segments = config.get("segments")
     if not isinstance(segments, list) or not segments:
         raise AudioError("No cinematic segments were configured.")
@@ -320,7 +334,10 @@ def validate_config(config):
         seen.add(ident)
         if segment.get("speaker") not in voices or not isinstance(segment.get("text"), str) or not segment["text"].strip():
             raise AudioError(f"{ident} needs an approved speaker and nonempty text.")
-        number(segment.get("targetSeconds"), f"{ident} targetSeconds", 0.001)
+        slot = number(segment.get("targetSeconds"), f"{ident} targetSeconds", 0.001)
+        lead_in = number(segment.get("leadInSeconds", 0), f"{ident} leadInSeconds")
+        if lead_in and (config.get("timing") != "fixed" or lead_in >= slot):
+            raise AudioError("A music-only lead-in requires a fixed slot with room for the complete speech.")
         if not isinstance(segment.get("visual"), dict):
             raise AudioError(f"{ident} needs its original visual specification.")
         visual = segment["visual"]
@@ -328,6 +345,14 @@ def validate_config(config):
             start = number(visual.get("sourceStart"), f"{ident} sourceStart")
             if number(visual.get("sourceEnd"), f"{ident} sourceEnd") <= start:
                 raise AudioError(f"{ident} has an invalid recording window.")
+            hold = number(visual.get("holdEndSeconds", 0), f"{ident} holdEndSeconds")
+            if hold >= slot:
+                raise AudioError(f"{ident} must leave time to play its recording before the reading hold.")
+            if config.get("timing") == "fixed" and visual["sourceEnd"] - start > slot - hold + 1e-9:
+                raise AudioError(f"{ident} would accelerate the recorded demo; extend its fixed viewing time.")
+    if config.get("timing") == "fixed":
+        if abs(sum(segment["targetSeconds"] for segment in segments) - config["duration"]) > 1e-9:
+            raise AudioError("Fixed editorial slots must add up to the complete 118-second film.")
     music_request(config)
     return config
 
@@ -352,8 +377,9 @@ def api_key():
 def speech_request(config, index):
     segment = config["segments"][index]
     identity = voice_identity(config, segment["speaker"])
+    delivery = config["voices"][segment["speaker"]].get("delivery", "")
     body = {
-        "text": segment["text"], "model_id": config["model"],
+        "text": f"{delivery} {segment['text']}".strip(), "model_id": config["model"],
         "voice_settings": {**config["voiceSettings"], **config["voices"][segment["speaker"]].get("settings", {})},
     }
     # Only contiguous same-speaker lines provide continuity; never another narrator's text.
@@ -370,7 +396,7 @@ def speech_request(config, index):
     return inputs, identity
 
 
-def words_from_alignment(alignment, text):
+def words_from_alignment(alignment, text, *, delivery="", exclude_pause_timing=False):
     if not isinstance(alignment, dict):
         raise AudioError("The timestamped response has no usable alignment; the paid request will not be repeated.")
     chars = alignment.get("characters")
@@ -380,9 +406,22 @@ def words_from_alignment(alignment, text):
         raise AudioError("Alignment arrays must be nonempty.")
     if len(chars) != len(starts) or len(chars) != len(ends) or not all(isinstance(char, str) for char in chars):
         raise AudioError("Alignment arrays have inconsistent lengths or characters.")
+    aligned = "".join(chars)
+    if delivery and aligned.lstrip().startswith(delivery):
+        # v4 aligns the delivery tag too; remove only the exact requested prefix.
+        remaining = len(aligned) - len(aligned.lstrip()) + len(delivery)
+        kept = []
+        for char, begin, end in zip(chars, starts, ends, strict=True):
+            skip = min(len(char), remaining)
+            remaining -= skip
+            if char[skip:]:
+                kept.append((char[skip:], begin, end))
+        if not kept:
+            raise AudioError("The provider aligned a direction but no spoken words.")
+        chars, starts, ends = map(list, zip(*kept, strict=True))
     if " ".join("".join(chars).split()) != " ".join(text.split()):
         raise AudioError("The returned alignment does not match the requested text; retained for manual review.")
-    words, current, first, last, previous_start, previous_end = [], "", 0.0, 0.0, 0.0, 0.0
+    words, current, first, last, content_end, previous_start, previous_end = [], "", 0.0, 0.0, None, 0.0, 0.0
     for char, begin, end in zip(chars, starts, ends, strict=True):
         begin = number(begin, "character start")
         end = number(end, "character end")
@@ -392,15 +431,19 @@ def words_from_alignment(alignment, text):
         for part in re.findall(r"\s+|\S+", char):
             if part.isspace():
                 if current:
-                    words.append({"word": current, "start": first, "end": last})
+                    words.append({"word": current, "start": first, "end": content_end if content_end is not None else last})
                 current = ""
+                content_end = None
             else:
                 if not current:
                     first = begin
                 current += part
                 last = end
+                # v4 assigns trailing punctuation a pause that can outlast the MP3.
+                if not exclude_pause_timing or part.strip(".,!?;:"):
+                    content_end = end
     if current:
-        words.append({"word": current, "start": first, "end": last})
+        words.append({"word": current, "start": first, "end": content_end if content_end is not None else last})
     if not words:
         raise AudioError("No word timings were returned.")
     return words
@@ -419,6 +462,19 @@ def validate_words(words, duration):
         if start < previous or end < start or end > duration + ALIGNMENT_TOLERANCE:
             raise AudioError("Word alignment lies outside the complete audio stem; no timings were clipped.")
         previous = start
+
+
+def alignment_padding(words, measured, model):
+    overhang = max(word["end"] for word in words) - measured["duration"]
+    if overhang <= ALIGNMENT_TOLERANCE:
+        return 0.0
+    if (
+        model != "eleven_v4" or measured["codec"] != "mp3" or measured["sampleRate"] != 44100
+        or overhang > 1152 / measured["sampleRate"] + ALIGNMENT_TOLERANCE
+    ):
+        raise AudioError("Spoken alignment exceeds the audio by more than one MP3 frame; retained for review.")
+    # Keep both the original MP3 and its timestamps; pad the derived PCM, not the speech.
+    return (math.ceil(overhang * SAMPLE_RATE - 1e-9) + 1) / SAMPLE_RATE
 
 
 def retime_words(words, tempo):
@@ -511,6 +567,17 @@ def voice_cache(config, index):
     request_hash = fingerprint(inputs)
     audio, meta_path, journal = voice_paths(segment["id"], request_hash)
     meta = cached_artifact(audio, meta_path, request_hash)
+    if meta is None:
+        if output_path(journal).exists() or output_path(audio.with_suffix(".response.json")).exists():
+            raise AudioError(
+                f"{segment['id']}: an earlier request has no committed, valid cache. "
+                f"Investigate {relative(journal)}; no duplicate request is allowed."
+            )
+        for candidate in sorted((BUILD / "voices").glob(f"*/{request_hash}.json")):
+            meta = cached_artifact(candidate.with_suffix(".mp3"), candidate, request_hash)
+            if meta:
+                audio = from_relative(meta["audio"])
+                break
     if meta:
         if meta.get("inputs") != inputs:
             raise AudioError(f"{segment['id']}: synthesis metadata is stale.")
@@ -518,15 +585,17 @@ def voice_cache(config, index):
         if not response_path.is_file() or sha256(response_path) != meta.get("responseSha256"):
             raise AudioError(f"{segment['id']}: alignment response cache is missing or modified.")
         response = read_json(response_path)
-        words = words_from_alignment(response.get("alignment"), segment["text"])
+        words = words_from_alignment(
+            response.get("alignment"), segment["text"],
+            delivery=config["voices"][segment["speaker"]].get("delivery", ""),
+            exclude_pause_timing=config["model"] == "eleven_v4",
+        )
         if words != meta.get("words"):
             raise AudioError(f"{segment['id']}: word metadata differs from the saved alignment.")
-        validate_words(words, meta["probe"]["duration"])
-    elif output_path(journal).exists() or output_path(audio.with_suffix(".response.json")).exists():
-        raise AudioError(
-            f"{segment['id']}: an earlier request has no committed, valid cache. "
-            f"Investigate {relative(journal)}; no duplicate request is allowed."
-        )
+        padding = alignment_padding(words, meta["probe"], config["model"])
+        if meta.get("alignmentPaddingSeconds", 0) != padding:
+            raise AudioError("The voice cache does not record its required bounded alignment padding.")
+        validate_words(words, meta["probe"]["duration"] + padding)
     return inputs, identity, meta
 
 
@@ -546,10 +615,12 @@ def voices(config, *, only=None, generate=False, timeout=120):
     if missing:
         require_audio_tools()
     key = api_key() if missing else None
-    results = []
+    results, completed_requests = [], {}
     for segment, inputs, identity, meta in entries:
+        request_hash = fingerprint(inputs)
         if meta is None:
-            request_hash = fingerprint(inputs)
+            meta = completed_requests.get(request_hash)
+        if meta is None:
             audio, meta_path, journal = voice_paths(segment["id"], request_hash)
             prior = list(audio.parent.glob("*.mp3")) if audio.parent.is_dir() else []
             if prior:
@@ -576,14 +647,21 @@ def voices(config, *, only=None, generate=False, timeout=120):
                     raise AudioError("TTS returned empty audio; no regeneration was attempted.")
                 atomic_bytes(audio, decoded)
                 measured = probe_audio(audio, decode=True)
-                words = words_from_alignment(retained["alignment"], segment["text"])
-                validate_words(words, measured["duration"])
+                words = words_from_alignment(
+                    retained["alignment"], segment["text"],
+                    delivery=config["voices"][segment["speaker"]].get("delivery", ""),
+                    exclude_pause_timing=config["model"] == "eleven_v4",
+                )
+                padding = alignment_padding(words, measured, config["model"])
+                validate_words(words, measured["duration"] + padding)
                 meta = artifact_metadata(
                     audio, inputs, measured, id=segment["id"], speaker=segment["speaker"], words=words,
                     responseSha256=sha256(response_path), provider=provider, createdAt=timestamp(),
+                    alignmentPaddingSeconds=padding,
                 )
                 atomic_json(meta_path, meta)
         print(f"cached  {segment['id']} {meta['probe']['duration']:.3f}s / {config['voices'][segment['speaker']]['name']}")
+        completed_requests[request_hash] = meta
         results.append(meta)
     return results
 
@@ -716,9 +794,12 @@ def normalize_audio(source, destination, *, channels, target, peak, lra, prefix=
     return measured, {"firstPass": first, "secondPass": second, "targetLufs": target, "targetTruePeak": peak, "targetLra": lra}
 
 
-def normalized_voice(raw, *, generate, ffmpeg_version, tempo=1.0, base=None):
+def normalized_voice(raw, *, generate, ffmpeg_version, tempo=1.0, base=None, lead_in=0.0):
     if not 1.0 <= tempo <= MAX_TEMPO:
         raise AudioError("Only a single 1.00–1.10x pitch-preserving tempo correction is supported.")
+    lead_in = number(lead_in, "narration lead-in")
+    if lead_in and (tempo != 1 or base is not None):
+        raise AudioError("A fixed music-only lead-in cannot be tempo-corrected or added twice.")
     source_meta = base if base is not None else raw
     source = from_relative(source_meta["audio"])
     inputs = {
@@ -727,10 +808,18 @@ def normalized_voice(raw, *, generate, ffmpeg_version, tempo=1.0, base=None):
         "tempoPadSeconds": TEMPO_PAD if tempo > 1 else 0, "sampleRate": SAMPLE_RATE, "channels": 1,
         "targetLufs": VOICE_LUFS, "targetTruePeak": -3.0, "targetLra": 7.0, "edgeFadeSeconds": 0.004,
     }
+    if lead_in:
+        inputs["leadInSeconds"] = lead_in
+    padding = raw.get("alignmentPaddingSeconds", 0)
+    if padding:
+        inputs["alignmentPaddingSeconds"] = padding
     stem = BUILD / "stems" / raw["id"] / fingerprint(inputs)
     audio, meta_path = stem.with_suffix(".wav"), stem.with_suffix(".json")
     meta = cached_artifact(audio, meta_path, fingerprint(inputs), immutable=False)
     words = retime_words(raw["words"], tempo)
+    if lead_in:
+        words = [{"word": word["word"], "start": word["start"] + lead_in, "end": word["end"] + lead_in}
+                 for word in words]
     if meta:
         if meta.get("words") != words or meta.get("tempo") != tempo:
             raise AudioError("Cached normalized stem has inconsistent word timings.")
@@ -741,6 +830,10 @@ def normalized_voice(raw, *, generate, ffmpeg_version, tempo=1.0, base=None):
         if tempo > 1:
             # Flush WSOLA's trailing window instead of truncating the last phoneme.
             filters += [f"apad=pad_dur={TEMPO_PAD}", f"atempo={tempo:.9f}"]
+        if lead_in:
+            filters.append(f"adelay={round(lead_in * SAMPLE_RATE)}S:all=1")
+        if padding and base is None:
+            filters.append(f"apad=pad_len={round(padding * SAMPLE_RATE)}")
         filters += ["afade=t=in:d=0.004", "areverse", "afade=t=in:d=0.004", "areverse"]
         measured, normalization = normalize_audio(
             source, audio, channels=1, target=VOICE_LUFS, peak=-3.0, lra=7.0, prefix=",".join(filters),
@@ -793,7 +886,7 @@ def choose_tempo(durations, *, seconds=118.0, fps=60, allow=False):
     return tempo
 
 
-def allocate_timeline(segments, durations, *, seconds=118.0, fps=60):
+def allocate_timeline(segments, durations, *, seconds=118.0, fps=60, fixed=False):
     if not segments or len(segments) != len(durations):
         raise AudioError("Every segment needs a measured speech duration.")
     durations = [number(duration, "speech duration", 1 / SAMPLE_RATE) for duration in durations]
@@ -808,14 +901,29 @@ def allocate_timeline(segments, durations, *, seconds=118.0, fps=60):
             "Shorten narration; it will not be clipped or corrected a second time."
         )
     weights = [number(segment["targetSeconds"], "targetSeconds", 0.001) for segment in segments]
-    weighted = [spare * weight / sum(weights) for weight in weights]
-    extra = [math.floor(value) for value in weighted]
-    order = sorted(range(len(segments)), key=lambda index: (-(weighted[index] - extra[index]), index))
-    for index in order[:spare - sum(extra)]:
-        extra[index] += 1
+    if fixed:
+        slots = [round(weight * fps) for weight in weights]
+        if any(abs(frames / fps - weight) > 1e-9 for frames, weight in zip(slots, weights, strict=True)):
+            raise AudioError("Fixed editorial slots must land on whole frames.")
+        if sum(slots) != total_frames:
+            raise AudioError("Fixed editorial slots must fill exactly the complete film.")
+        for segment, frames, required in zip(segments, slots, minimum, strict=True):
+            if frames < required:
+                raise AudioError(
+                    f"{segment['id']}: complete speech and its hold exceed the fixed slot "
+                    f"by {(required - frames) / fps:.3f}s. Re-edit the slot or shorten the line; "
+                    "no automatic speed-up or clipping is allowed."
+                )
+    else:
+        weighted = [spare * weight / sum(weights) for weight in weights]
+        extra = [math.floor(value) for value in weighted]
+        order = sorted(range(len(segments)), key=lambda index: (-(weighted[index] - extra[index]), index))
+        for index in order[:spare - sum(extra)]:
+            extra[index] += 1
+        slots = [floor + addition for floor, addition in zip(minimum, extra, strict=True)]
     clock, result = 0, []
     for index, segment in enumerate(segments):
-        frames = minimum[index] + extra[index]
+        frames = slots[index]
         result.append({
             **copy.deepcopy(segment), "index": index, "start": clock / fps,
             "duration": frames / fps, "speech": durations[index],
@@ -829,7 +937,7 @@ def allocate_timeline(segments, durations, *, seconds=118.0, fps=60):
 def make_film(config, stems, terminal, tempo):
     segments = allocate_timeline(
         config["segments"], [stem["probe"]["duration"] for stem in stems],
-        seconds=config["duration"], fps=config["fps"],
+        seconds=config["duration"], fps=config["fps"], fixed=config.get("timing") == "fixed",
     )
     for segment, stem in zip(segments, stems, strict=True):
         segment.update(audio=stem["audio"], words=copy.deepcopy(stem["words"]))
@@ -838,6 +946,7 @@ def make_film(config, stems, terminal, tempo):
         "fps": config["fps"], "width": config["width"], "height": config["height"],
         "duration": config["duration"], "maxSeconds": config["maxSeconds"], "segments": segments,
         "terminal": copy.deepcopy(terminal),
+        "edit": copy.deepcopy(config.get("edit", {})),
         "voices": {speaker: {"name": voice["name"]} for speaker, voice in config["voices"].items()},
         "audioPlan": {
             "version": VERSION, "tempo": tempo, "sampleRate": SAMPLE_RATE,
@@ -853,8 +962,11 @@ def plan(config, *, generate=False, allow_tempo=False):
         raise AudioError("The original terminal transcript must be a list of lines.")
     raws = voices(config, generate=False)
     version = tool_version()
-    base = [normalized_voice(raw, generate=generate, ffmpeg_version=version) for raw in raws]
-    tempo = choose_tempo(
+    base = [
+        normalized_voice(raw, generate=generate, ffmpeg_version=version, lead_in=segment.get("leadInSeconds", 0))
+        for raw, segment in zip(raws, config["segments"], strict=True)
+    ]
+    tempo = 1.0 if config.get("timing") == "fixed" else choose_tempo(
         [stem["probe"]["duration"] for stem in base], seconds=config["duration"], fps=config["fps"], allow=allow_tempo,
     )
     if tempo > 1:
@@ -949,6 +1061,21 @@ def normalized_music(raw, *, generate, ffmpeg_version):
 
 
 def section_dynamics(config):
+    if "musicDynamics" in config.get("edit", {}):
+        sections = config["edit"]["musicDynamics"]
+        clock = 0.0
+        if not isinstance(sections, list) or not sections:
+            raise AudioError("Editorial score dynamics need nonempty, explicit sections.")
+        for section in sections:
+            if abs(number(section.get("start"), "music start") - clock) > 1e-9:
+                raise AudioError("Editorial score dynamics must be contiguous.")
+            clock += number(section.get("duration"), "music duration", 0.001)
+            gain = section.get("gainDb")
+            if isinstance(gain, bool) or not isinstance(gain, (int, float)) or not math.isfinite(gain):
+                raise AudioError("Each editorial music section needs a finite gainDb.")
+        if abs(clock - config["duration"]) > 1e-9:
+            raise AudioError("Editorial score dynamics must cover the full film.")
+        return copy.deepcopy(sections)
     levels = {
         "Anticipation": -3.0, "The gateway": 0.0, "The evidence": -4.5,
         "The boundary": -2.5, "Open to agents": 0.5,
@@ -965,7 +1092,8 @@ def section_dynamics(config):
 def dynamics_expression(sections, final_speech_end):
     expression = f"{sections[0]['gainDb']:.6f}"
     for previous, current in zip(sections, sections[1:]):
-        boundary, width = current["start"], 0.7
+        boundary = current["start"]
+        width = min(0.7, previous["duration"] / 2, current["duration"] / 2)
         start, end = max(0.0, boundary - width / 2), boundary + width / 2
         ramp = f"{previous['gainDb']:.6f}+({current['gainDb'] - previous['gainDb']:.6f})*(t-{start:.6f})/{end-start:.6f}"
         expression = f"if(lt(t,{start:.6f}),({expression}),if(lt(t,{end:.6f}),({ramp}),{current['gainDb']:.6f}))"
@@ -975,8 +1103,10 @@ def dynamics_expression(sections, final_speech_end):
 def effect_events(film):
     by_id = {segment["id"]: segment for segment in film["segments"]}
     cues = [
-        ("s04", "riser", -0.75, 0.75, 0.012, -0.08),
-        ("s04", "impact", 0.03, 0.55, 0.035, 0.0),
+        ("s01", "impact", 0.18, 0.7, 0.055, 0.0),
+        ("s01", "tick", 3.35, 0.065, 0.028, -0.10),
+        ("s01", "riser", 4.8, 1.7, 0.018, 0.0),
+        ("s04", "impact", 0.03, 0.65, 0.060, 0.0),
         ("s12", "tick", 0.25, 0.055, 0.025, -0.12),
         ("s14", "tick", 0.12, 0.065, 0.023, 0.12),
         ("s16", "tick", 0.55, 0.045, 0.020, 0.08),

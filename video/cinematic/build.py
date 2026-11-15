@@ -46,6 +46,49 @@ def probe(path: Path) -> dict:
     ).stdout)
 
 
+def validate_editorial_plan(film: dict) -> None:
+    edit = film.get("edit", {})
+    chapters, zooms = edit.get("chapters", []), edit.get("zooms", [])
+    if len(chapters) != 3 or {item["id"] for item in chapters} != {"milk", "butter", "boundary"}:
+        raise ValueError("The business pitch must keep all three clearly identified scenarios.")
+    for chapter in chapters:
+        shots = [segment for segment in film["segments"] if segment.get("chapter") == chapter["id"]]
+        if (
+            not shots or abs(shots[0]["start"] - chapter["start"]) > .002
+            or abs(shots[-1]["start"] + shots[-1]["duration"] - chapter["end"]) > .002
+            or abs(sum(shot["duration"] for shot in shots) - (chapter["end"] - chapter["start"])) > .002
+        ):
+            raise ValueError(f"Scenario timing drifted: {chapter['id']}")
+    if len(zooms) != 2 or {zoom["id"] for zoom in zooms} != {"approval", "agent-decisions"}:
+        raise ValueError("Exactly two demo zooms are allowed: approval and agent decisions.")
+    previous_end = 0.0
+    for zoom in sorted(zooms, key=lambda item: item["start"]):
+        values = [zoom["start"], zoom["end"], zoom["scale"], zoom["ramp"], *zoom["center"]]
+        if (
+            not all(isinstance(value, (int, float)) and math.isfinite(value) for value in values)
+            or len(zoom["center"]) != 2 or not all(0 <= value <= 1 for value in zoom["center"])
+            or zoom["start"] < previous_end or zoom["end"] > film["duration"]
+            or not 1 < zoom["scale"] <= 2 or zoom["ramp"] <= 0
+            or zoom["end"] - zoom["start"] <= 2 * zoom["ramp"]
+        ):
+            raise ValueError("Invalid, overlapping or unreadably short demo zoom.")
+        purpose = "milk" if zoom["id"] == "approval" else "butter"
+        shots = [segment for segment in film["segments"]
+                 if segment["start"] < zoom["end"] and segment["start"] + segment["duration"] > zoom["start"]]
+        if not shots or any(not shot["visual"].get("rec") or shot.get("chapter") != purpose for shot in shots):
+            raise ValueError(f"The {zoom['id']} zoom is outside its recorded scenario.")
+        previous_end = zoom["end"]
+    for segment in film["segments"]:
+        visual = segment["visual"]
+        if visual.get("rec"):
+            hold = visual.get("holdEndSeconds", 0)
+            playback = segment["duration"] - hold
+            if not math.isfinite(hold) or hold < 0 or playback <= 0:
+                raise ValueError("Invalid demo reading hold.")
+            if visual["sourceEnd"] - visual["sourceStart"] > playback + .002:
+                raise ValueError("The revised demonstration must not accelerate its source recording.")
+
+
 def validate_timeline(film: dict) -> None:
     if film["fps"] != 60 or (film["width"], film["height"]) != (1920, 1080):
         raise ValueError("The cinematic master must be 1920x1080 at 60fps.")
@@ -86,6 +129,7 @@ def validate_timeline(film: dict) -> None:
             raise ValueError("The original refusal capture is missing.")
         if not all(any(re.search(rf"\b{code}\b", line) for line in terminal) for code in (409, 403)):
             raise ValueError("Both captured refusal responses are required.")
+    validate_editorial_plan(film)
 
 
 def draft_film(config: dict, terminal: list) -> dict:
@@ -93,12 +137,14 @@ def draft_film(config: dict, terminal: list) -> dict:
     clock = 0.0
     segments = []
     for source in config["segments"]:
-        duration = source["targetSeconds"] / total_weight * config["duration"]
+        duration = (source["targetSeconds"] if config.get("timing") == "fixed"
+                    else source["targetSeconds"] / total_weight * config["duration"])
         speech = duration - (1.8 if source["id"] == "s21" else .3)
+        lead_in = source.get("leadInSeconds", 0)
         tokens = source["text"].split()
         words = [
-            {"word": word, "start": .08 + i * (speech - .08) / len(tokens),
-             "end": .08 + (i + .85) * (speech - .08) / len(tokens)}
+            {"word": word, "start": lead_in + .08 + i * (speech - lead_in - .08) / len(tokens),
+             "end": lead_in + .08 + (i + .85) * (speech - lead_in - .08) / len(tokens)}
             for i, word in enumerate(tokens)
         ]
         segments.append({**source, "start": clock, "duration": duration, "speech": speech, "words": words})
@@ -106,7 +152,7 @@ def draft_film(config: dict, terminal: list) -> dict:
     return {
         **{key: config[key] for key in ("fps", "width", "height", "duration", "maxSeconds")},
         "draft": True, "segments": segments,
-        "terminal": terminal,
+        "terminal": terminal, "edit": config.get("edit", {}),
     }
 
 
@@ -291,7 +337,7 @@ def render(film: dict, workers: int) -> None:
         "-f", "concat", "-safe", "1", "-i", str(concat), "-i", str(mix_path),
         "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
         "-ar", "48000", "-ac", "2", "-t", str(film["duration"]), "-movflags", "+faststart",
-        "-metadata", "title=Open to Agents - Cinematic Cut", str(partial))
+        "-metadata", "title=Open to Agents - Business Pitch", str(partial))
     info = probe(partial)
     video = next(s for s in info["streams"] if s["codec_type"] == "video")
     if float(info["format"]["duration"]) > 119 or int(video["nb_frames"]) != total_frames:
@@ -308,6 +354,13 @@ def render(film: dict, workers: int) -> None:
 
 def verify() -> None:
     film = load_film()
+    manifest = json.loads((BUILD / "render-manifest.json").read_text())
+    if (
+        manifest["videoSha256"] != digest(FINAL)
+        or manifest["sourceSignature"] != source_signature(film)
+        or manifest["mixSha256"] != digest(BUILD / "mix.wav")
+    ):
+        raise ValueError("The encoded movie does not match the current edit, source assets and mastered mix.")
     info = probe(FINAL)
     video = next(s for s in info["streams"] if s["codec_type"] == "video")
     audio = next(s for s in info["streams"] if s["codec_type"] == "audio")
@@ -333,6 +386,17 @@ def verify() -> None:
         "resolution": [video["width"], video["height"]], "fps": video["r_frame_rate"],
         "audioChannels": audio["channels"], "integratedLUFS": integrated, "truePeakDBTP": peak,
         "interiorBlackIntervals": bad_black, "sha256": digest(FINAL),
+        "renderProvenanceVerified": True,
+        "architectureSeconds": sum(segment["duration"] for segment in film["segments"]
+                                   if segment["visual"].get("scene") == "architecture"),
+        "scenarioSeconds": {chapter["id"]: chapter["end"] - chapter["start"]
+                            for chapter in film["edit"]["chapters"]},
+        "demoZooms": film["edit"]["zooms"],
+        "maximumRecordingSpeed": max(
+            (segment["visual"]["sourceEnd"] - segment["visual"]["sourceStart"])
+            / (segment["duration"] - segment["visual"].get("holdEndSeconds", 0))
+            for segment in film["segments"] if segment["visual"].get("rec")
+        ),
         "originalUnchanged": digest(ORIGINAL) == json.loads((ROOT / "config.json").read_text())["originalSha256"],
     }
     (BUILD / "verification.json").write_text(json.dumps(result, indent=2) + "\n")
