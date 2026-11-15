@@ -1,21 +1,26 @@
+import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
-from video.cinematic.build import ROOT, draft_film, srt_timestamp, validate_timeline
+ROOT = Path(__file__).resolve().parents[1]
+SPEC = importlib.util.spec_from_file_location("cinematic_build", ROOT / "video" / "cinematic" / "build.py")
+builder = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(builder)
 
 
 @pytest.fixture
 def film():
-    config = json.loads((ROOT / "config.json").read_text())
-    return draft_film(config, ["409 Approval required", "403 An authenticated human is required"])
+    config = json.loads((builder.ROOT / "config.json").read_text())
+    return builder.draft_film(config, ["409 Approval required", "403 An authenticated human is required"])
 
 
 def test_draft_covers_exact_duration_and_preserves_recorded_evidence(film):
-    validate_timeline(film)
+    builder.validate_timeline(film)
     assert film["draft"] is True
     assert sum(s["duration"] for s in film["segments"]) == pytest.approx(118)
-    source = {s["id"]: s["visual"] for s in json.loads((ROOT / "config.json").read_text())["segments"]}
+    source = {s["id"]: s["visual"] for s in json.loads((builder.ROOT / "config.json").read_text())["segments"]}
     assert {s["id"]: s["visual"] for s in film["segments"]} == source
     assert film["segments"][-1]["duration"] - film["segments"][-1]["speech"] >= 1.3
 
@@ -39,9 +44,9 @@ def test_timeline_rejects_unusable_deliverables(film, failure):
     else:
         film["segments"][-1]["speech"] = film["segments"][-1]["duration"] - .2
     with pytest.raises(ValueError):
-        validate_timeline(film)
+        builder.validate_timeline(film)
 
 
 def test_subtitle_timestamp_carries_rounded_milliseconds():
-    assert srt_timestamp(59.9996) == "00:01:00,000"
-    assert srt_timestamp(117.225) == "00:01:57,225"
+    assert builder.srt_timestamp(59.9996) == "00:01:00,000"
+    assert builder.srt_timestamp(117.225) == "00:01:57,225"
