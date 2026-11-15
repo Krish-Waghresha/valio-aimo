@@ -1,0 +1,157 @@
+{
+  "title": "Open to Agents - Cinematic Cut",
+  "duration": 118.0,
+  "maxSeconds": 119.0,
+  "fps": 60,
+  "width": 1920,
+  "height": 1080,
+  "model": "eleven_multilingual_v2",
+  "voiceSettings": {
+    "stability": 0.48,
+    "similarity_boost": 0.82,
+    "style": 0.25,
+    "use_speaker_boost": true,
+    "speed": 1.08
+  },
+  "voices": {
+    "krish": {"name": "Krish", "env": "ELEVENLABS_VOICE_ID"},
+    "jakub": {"name": "Jakub", "env": "ELEVENLABS_VOICE_JAKUB"}
+  },
+  "originalSha256": "b4b5f21d1795ba3e83c49ee77e37478ea31bf6a6b8e7b5208d2d8c506327716d",
+  "segments": [
+    {
+      "id": "s01", "speaker": "krish", "targetSeconds": 3.2,
+      "text": "Who places your next wholesale order?",
+      "visual": {"scene": "hook"}
+    },
+    {
+      "id": "s02", "speaker": "jakub", "targetSeconds": 4.3,
+      "text": "For decades, a person. A phone call. A catalog. A webshop.",
+      "visual": {"scene": "history"}
+    },
+    {
+      "id": "s03", "speaker": "krish", "targetSeconds": 3.8,
+      "text": "Next, an agent. But who sets the rules?",
+      "visual": {"scene": "agent"}
+    },
+    {
+      "id": "s04", "speaker": "jakub", "targetSeconds": 4.3,
+      "text": "Our answer: open to agents. On Valio Aimo's terms.",
+      "visual": {"scene": "hero"}
+    },
+    {
+      "id": "s05", "speaker": "krish", "targetSeconds": 3.9,
+      "text": "We're The Delusionals. We built two things that work as one.",
+      "visual": {"scene": "title"}
+    },
+    {
+      "id": "s06", "speaker": "jakub", "targetSeconds": 10.8,
+      "text": "First, the Trusted Gateway. An open API for credentialed agents: find products, check price and stock, enforce limits, approve when needed, and record a mock order. Every step logged.",
+      "visual": {"scene": "architecture", "part": 1}
+    },
+    {
+      "id": "s07", "speaker": "krish", "targetSeconds": 7.1,
+      "text": "Second, the workspace. The chef describes the need. It sources products, handles exceptions, and asks a human when it matters.",
+      "visual": {"scene": "architecture", "part": 2}
+    },
+    {
+      "id": "s08", "speaker": "jakub", "targetSeconds": 2.5,
+      "text": "Three scenarios. One set of rules.",
+      "visual": {"scene": "scenarios"}
+    },
+    {
+      "id": "s09", "speaker": "jakub", "targetSeconds": 5.8,
+      "text": "First, a big order: a thousand litres of lactose-free milk, by Monday.",
+      "visual": {"rec": "A", "sourceStart": 0.0, "sourceEnd": 7.352},
+      "chapter": "01 / A big order", "caption": true
+    },
+    {
+      "id": "s10", "speaker": "jakub", "targetSeconds": 4.2,
+      "text": "The agent structures the request and clearly marks its assumptions.",
+      "visual": {"rec": "A", "sourceStart": 7.352, "sourceEnd": 11.871},
+      "chapter": "01 / A big order", "caption": true
+    },
+    {
+      "id": "s11", "speaker": "krish", "targetSeconds": 4.3,
+      "text": "It checks current price and stock for eleven shortlisted products.",
+      "visual": {"rec": "A", "sourceStart": 11.871, "sourceEnd": 15.833},
+      "chapter": "01 / A big order", "caption": true
+    },
+    {
+      "id": "s12", "speaker": "krish", "targetSeconds": 11.6,
+      "text": "But the usual Arla has only three hundred and eighty-four litres. The official substitute meets the request, in stock, and costs six hundred euros less than splitting the basket.",
+      "visual": {"rec": "A", "sourceStart": 15.833, "sourceEnd": 26.436},
+      "chapter": "01 / A stock-out, not a dead end", "caption": true
+    },
+    {
+      "id": "s13", "speaker": "krish", "targetSeconds": 4.6,
+      "text": "Eleven hundred and fifty euros exceeds the agent's five-hundred-euro limit.",
+      "visual": {"rec": "A", "sourceStart": 26.436, "sourceEnd": 30.736},
+      "chapter": "01 / Authority has a limit", "caption": true
+    },
+    {
+      "id": "s14", "speaker": "jakub", "targetSeconds": 9.5,
+      "text": "The manager approves the exact basket. Price and stock are checked again. A mock order is recorded, with a full audit trail.",
+      "visual": {"rec": "B", "sourceStart": 0.0, "sourceEnd": 8.606},
+      "chapter": "01 / The kitchen manager", "caption": true
+    },
+    {
+      "id": "s15", "speaker": "jakub", "targetSeconds": 4.2,
+      "text": "Second, twenty kilos of butter for Friday.",
+      "visual": {"rec": "C", "sourceStart": 0.0, "sourceEnd": 4.798},
+      "chapter": "02 / An everyday order", "caption": true
+    },
+    {
+      "id": "s16", "speaker": "krish", "targetSeconds": 6.2,
+      "text": "Forty-two euros. Under the limit. The agent commits on its own, and it's still on the record.",
+      "visual": {"rec": "C", "sourceStart": 4.798, "sourceEnd": 10.478},
+      "chapter": "02 / Within its authority", "caption": true
+    },
+    {
+      "id": "s17", "speaker": "krish", "targetSeconds": 7.0,
+      "text": "Third: an agent tries to skip the manager, then approve itself. Both requests are refused.",
+      "visual": {"scene": "terminal"},
+      "chapter": "03 / An agent tries to cheat", "caption": true
+    },
+    {
+      "id": "s18", "speaker": "jakub", "targetSeconds": 7.7,
+      "text": "Small orders alone. Humans sign what matters. Never self-approval, stale quotes, or guessing allergens are safe.",
+      "visual": {"scene": "rules"}
+    },
+    {
+      "id": "s19", "speaker": "krish", "targetSeconds": 4.0,
+      "text": "The webshop stays. The buying interface is changing.",
+      "visual": {"scene": "moving"}
+    },
+    {
+      "id": "s20", "speaker": "jakub", "targetSeconds": 2.7,
+      "text": "Open to agents.",
+      "visual": {"scene": "end", "part": 1}
+    },
+    {
+      "id": "s21", "speaker": "krish", "targetSeconds": 5.5,
+      "text": "On Valio Aimo's terms.",
+      "visual": {"scene": "end", "part": 2}
+    }
+  ],
+  "music": {
+    "model": "music_v1",
+    "positive_global_styles": [
+      "Instrumental premium technology product film, 118 seconds, elegant and confident",
+      "110 BPM, restrained cinematic electronic pulse, warm deep bass, tactile percussion, glassy synth details",
+      "Sparse midrange with generous space for two alternating narrators, no lead melody competing with voices",
+      "A continuous coherent score with intentional transitions, not separate songs"
+    ],
+    "negative_global_styles": [
+      "vocals", "lyrics", "choir", "spoken words", "aggressive trailer horns",
+      "constant risers", "glitch overload", "distorted bass", "busy melody"
+    ],
+    "sections": [
+      {"name": "Anticipation", "seconds": 14, "style": "Sparse warm sub pulse, tactile ticks, slowly opening luminous texture; one short breath before the reveal"},
+      {"name": "The gateway", "seconds": 25, "style": "A confident clean groove arrives; precise soft percussion, dimensional arpeggios, forward motion"},
+      {"name": "The evidence", "seconds": 50, "style": "Quieter rhythmic bed under the narration and UI demonstration, restrained bass, no distracting fills"},
+      {"name": "The boundary", "seconds": 16, "style": "Brief tension, a decisive muted impact, then controlled confident resolution"},
+      {"name": "Open to agents", "seconds": 13, "style": "Warm uplifting payoff, one elegant final chord around second 115, clean sustained tail and definite ending"}
+    ]
+  }
+}

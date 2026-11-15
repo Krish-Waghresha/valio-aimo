@@ -1,5 +1,9 @@
 # Demo film
 
+The separate [cinematic cut pipeline](cinematic/README.md) targets **118 seconds at 1080p60**,
+using the team's two trained voices and an original stereo score. It writes
+`video/build/final-cinematic.mp4` without replacing the published cut below.
+
 [Watch the public demo](https://www.youtube.com/watch?v=BWGWDc29ZfQ).
 The locally inspected cut is **118.6 seconds, 1920×1080, about 19 MB**.
 It combines actual app footage and gateway replies with rendered titles, transitions and generated
