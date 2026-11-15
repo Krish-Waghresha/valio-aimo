@@ -191,6 +191,7 @@ def test_voice_cache_never_repeats_paid_request_and_detects_corruption(config, b
 @pytest.mark.parametrize("command", ["voices", "music"])
 def test_timeout_journal_blocks_paid_retry(config, build, monkeypatch, command):
     calls = []
+    monkeypatch.setattr(audio, "require_audio_tools", lambda: None)
 
     def timeout(*args, **kwargs):
         calls.append(True)
