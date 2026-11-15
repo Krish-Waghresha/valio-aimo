@@ -228,6 +228,43 @@ def test_fingerprint_tracks_voice_settings_text_and_same_speaker_context(config,
     assert audio.fingerprint(changed) != audio.fingerprint(baseline)
 
 
+def test_adjacent_context_and_high_quality_format_are_opt_in(config):
+    for index, speaker in enumerate(("krish", "jakub", "krish")):
+        config["segments"][index]["speaker"] = speaker
+    original, _ = audio.speech_request(config, 1)
+    assert "previous_text" not in original["request"] and "next_text" not in original["request"]
+    config.update(contextMode="adjacent", outputFormat="mp3_44100_192")
+    requested, _ = audio.speech_request(config, 1)
+    assert requested["request"]["previous_text"] == config["segments"][0]["text"]
+    assert requested["request"]["next_text"] == config["segments"][2]["text"]
+    assert requested["outputFormat"] == "mp3_44100_192"
+    assert audio.fingerprint(requested) != audio.fingerprint(original)
+    config["outputFormat"] = "mp3_44100_192&unexpected=option"
+    with pytest.raises(audio.AudioError, match="outputFormat"):
+        audio.speech_request(config, 1)
+
+
+def test_high_quality_format_reaches_the_synthesis_endpoint(config, build, monkeypatch):
+    config["segments"] = [{**config["segments"][0], "text": "A brief test."}]
+    config["outputFormat"] = "mp3_44100_192"
+    payload = tone(build / "fixture.mp3", 2.0).read_bytes()
+    text = config["segments"][0]["text"]
+    requested = []
+
+    def respond(endpoint, body, key, **kwargs):
+        requested.append(endpoint)
+        alignment = {
+            "characters": list(text),
+            "character_start_times_seconds": [index * .05 for index in range(len(text))],
+            "character_end_times_seconds": [(index + 1) * .05 for index in range(len(text))],
+        }
+        return json.dumps({"audio_base64": base64.b64encode(payload).decode(), "alignment": alignment}).encode(), {}
+
+    monkeypatch.setattr(audio, "provider_request", respond)
+    audio.voices(config, generate=True)
+    assert len(requested) == 1 and requested[0].endswith("?output_format=mp3_44100_192")
+
+
 def test_voice_cache_never_repeats_paid_request_and_detects_corruption(config, build, monkeypatch):
     first_segment = copy.deepcopy(config["segments"][0])
     config["segments"] = [first_segment, config["segments"][1], {**first_segment, "id": "repeat"}]

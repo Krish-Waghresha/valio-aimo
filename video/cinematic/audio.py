@@ -378,19 +378,24 @@ def speech_request(config, index):
     segment = config["segments"][index]
     identity = voice_identity(config, segment["speaker"])
     delivery = config["voices"][segment["speaker"]].get("delivery", "")
+    output_format = config.get("outputFormat", OUTPUT_FORMAT)
+    context_mode = config.get("contextMode", "same-speaker")
+    if not isinstance(output_format, str) or output_format not in {"mp3_44100_128", "mp3_44100_192"}:
+        raise AudioError("Narration outputFormat must be mp3_44100_128 or mp3_44100_192.")
+    if not isinstance(context_mode, str) or context_mode not in {"same-speaker", "adjacent"}:
+        raise AudioError("Narration contextMode must be same-speaker or adjacent.")
     body = {
         "text": f"{delivery} {segment['text']}".strip(), "model_id": config["model"],
         "voice_settings": {**config["voiceSettings"], **config["voices"][segment["speaker"]].get("settings", {})},
     }
-    # Only contiguous same-speaker lines provide continuity; never another narrator's text.
     for neighbor, field in ((index - 1, "previous_text"), (index + 1, "next_text")):
         if 0 <= neighbor < len(config["segments"]):
             adjacent = config["segments"][neighbor]
-            if adjacent["speaker"] == segment["speaker"]:
+            if context_mode == "adjacent" or adjacent["speaker"] == segment["speaker"]:
                 body[field] = adjacent["text"]
     inputs = {
         "version": VERSION, "provider": "elevenlabs", "operation": "tts-with-timestamps",
-        "outputFormat": OUTPUT_FORMAT, "voiceIdentitySha256": hashlib.sha256(identity.encode()).hexdigest(),
+        "outputFormat": output_format, "voiceIdentitySha256": hashlib.sha256(identity.encode()).hexdigest(),
         "request": body,
     }
     return inputs, identity
@@ -486,12 +491,14 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def provider_request(endpoint, body, key, *, timeout, operation, max_bytes=48 << 20):
+def provider_request(
+    endpoint, body, key, *, timeout, operation, max_bytes=48 << 20, content_type="application/json",
+):
     """One HTTP attempt, no redirects/retries, and no response-body error logging."""
     request = urllib.request.Request(
-        f"{API}/{endpoint}", data=None if body is None else canonical(body),
+        f"{API}/{endpoint}", data=body if body is None or isinstance(body, bytes) else canonical(body),
         method="GET" if body is None else "POST",
-        headers={"xi-api-key": key, "Content-Type": "application/json", "Accept": "*/*"},
+        headers={"xi-api-key": key, "Content-Type": content_type, "Accept": "*/*"},
     )
     started = time.monotonic()
     try:
@@ -517,7 +524,8 @@ def provider_request(endpoint, body, key, *, timeout, operation, max_bytes=48 <<
         status = exc.code
         exc.close()
         descriptions = {
-            400: "request rejected", 401: "authentication rejected", 403: "voice or model access denied",
+            400: "request rejected", 401: "authentication or API-key permission rejected",
+            403: "voice or model access denied",
             404: "voice or endpoint unavailable", 422: "request validation failed",
             429: "quota or rate limit", 500: "provider failure", 502: "provider gateway failure",
             503: "provider unavailable", 504: "provider gateway timeout",
@@ -628,7 +636,8 @@ def voices(config, *, only=None, generate=False, timeout=120):
             print(f"request {segment['id']} / {config['voices'][segment['speaker']]['name']} (one paid attempt)", flush=True)
             with paid_attempt(journal, inputs) as attempt:
                 payload, provider = provider_request(
-                    f"text-to-speech/{urllib.parse.quote(identity, safe='')}/with-timestamps?output_format={OUTPUT_FORMAT}",
+                    f"text-to-speech/{urllib.parse.quote(identity, safe='')}/with-timestamps"
+                    f"?output_format={inputs['outputFormat']}",
                     inputs["request"], key, timeout=timeout, operation=f"TTS {segment['id']}",
                 )
                 attempt["provider"] = provider
