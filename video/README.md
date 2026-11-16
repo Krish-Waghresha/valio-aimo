@@ -26,7 +26,7 @@ The voice-only commands require the exact original movie, original `config.json`
 Run them in the original production checkout, or restore matching original sources
 and retained media into a separate worktree. They are not a clean-clone build.
 
-The [frozen original-film production snapshot](https://github.com/Krish-Waghresha/valio-aimo/tree/0387355c9f8c173ff40c8cd4403e97022f6488cb)
+The [frozen original-film production snapshot](https://github.com/Krish-Waghresha/valio-aimo/tree/26acf5c068ad18809e552d71589d7c06130feb8f)
 preserves the matching script, both revoice tools, presentation assets and production
 notes. It is a historical production checkout, not the current application release.
 Generated video/audio caches and credentials still need to be restored separately.
